@@ -39,6 +39,8 @@ const els = {
   projectTitle: document.querySelector("#projectTitle"),
   projectForm: document.querySelector("#projectForm"),
   itemsTableBody: document.querySelector("#itemsTable tbody"),
+  itemsFileInput: document.querySelector("#itemsFileInput"),
+  importStatus: document.querySelector("#importStatus"),
   costForm: document.querySelector("#costForm"),
   checklist: document.querySelector("#checklist"),
   metrics: document.querySelector("#metrics"),
@@ -85,6 +87,10 @@ document.querySelector("#saveBtn").addEventListener("click", () => {
 });
 
 document.querySelector("#exportBtn").addEventListener("click", exportCurrentCsv);
+document.querySelector("#importItemsBtn").addEventListener("click", () => {
+  els.itemsFileInput.click();
+});
+document.querySelector("#templateBtn").addEventListener("click", downloadImportTemplate);
 
 document.querySelector("#printBtn").addEventListener("click", () => {
   renderPrintSheet();
@@ -113,23 +119,25 @@ els.costForm.addEventListener("input", handleCostInput);
 els.checklist.addEventListener("change", handleChecklistInput);
 els.itemsTableBody.addEventListener("input", handleItemInput);
 els.itemsTableBody.addEventListener("click", handleItemClick);
+els.itemsFileInput.addEventListener("change", handleItemsFile);
 
 render();
+persist();
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed.projects) && parsed.projects.length) return parsed;
+      if (Array.isArray(parsed.projects) && parsed.projects.length) return normalizeState(parsed);
     }
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
-  return {
+  return normalizeState({
     currentId: null,
     projects: seedProjects()
-  };
+  });
 }
 
 function persist() {
@@ -208,6 +216,9 @@ function renderEditor() {
   els.projectForm.innerHTML = `
     ${field("项目名称", "name", "text", project.name, "span-2")}
     ${field("客户/招标单位", "client", "text", project.client, "span-2")}
+    ${field("报价单位", "company", "text", project.company, "span-2")}
+    ${field("报价编号", "quoteNo", "text", project.quoteNo)}
+    ${field("联系人/电话", "contact", "text", project.contact)}
     ${field("代理机构", "agency", "text", project.agency)}
     ${field("项目预算", "budget", "number", project.budget)}
     ${field("开标日期", "deadline", "date", project.deadline)}
@@ -230,14 +241,20 @@ function renderItems() {
   const project = getCurrentProject();
   if (!project) return;
   els.itemsTableBody.innerHTML = project.items
-    .map((item) => `
+    .map((item) => {
+      const row = calculateItem(item);
+      return `
       <tr data-item-id="${item.id}">
         <td><input class="wide" data-item-field="name" value="${escapeAttr(item.name)}" /></td>
         <td><input data-item-field="model" value="${escapeAttr(item.model)}" /></td>
+        <td><input data-item-field="supplier" value="${escapeAttr(item.supplier)}" /></td>
         <td><input inputmode="decimal" data-item-field="qty" value="${item.qty}" /></td>
         <td><input data-item-field="unit" value="${escapeAttr(item.unit)}" /></td>
         <td><input inputmode="decimal" data-item-field="costUnit" value="${item.costUnit}" /></td>
         <td><input inputmode="decimal" data-item-field="quoteUnit" value="${item.quoteUnit}" /></td>
+        <td><span class="row-margin ${row.margin < 0 ? "danger" : row.margin < numberValue(project.targetMargin) ? "warn" : ""}">${formatPercent(row.margin)}</span></td>
+        <td><input inputmode="decimal" data-item-field="leadTime" value="${item.leadTime}" /></td>
+        <td><input inputmode="decimal" data-item-field="warranty" value="${item.warranty}" /></td>
         <td><input class="note" data-item-field="spec" value="${escapeAttr(item.spec)}" /></td>
         <td class="item-actions">
           <button class="icon-button row-delete" type="button" data-delete-item="${item.id}" aria-label="删除设备" title="删除设备">
@@ -245,7 +262,8 @@ function renderItems() {
           </button>
         </td>
       </tr>
-    `)
+    `;
+    })
     .join("");
 }
 
@@ -308,26 +326,29 @@ function renderPrintSheet() {
   const project = getCurrentProject();
   if (!project) return;
   const calc = calculate(project);
+  const taxRate = numberValue(project.taxRate);
   els.printSheet.innerHTML = `
     <div class="print-title">
       <div>
-        <h1>投标报价明细表</h1>
+        <p class="print-company">${escapeHtml(project.company || "报价单位")}</p>
+        <h1>投标报价单</h1>
+        <p>报价编号：${escapeHtml(project.quoteNo || "-")}</p>
         <p>项目名称：${escapeHtml(project.name || "")}</p>
-        <p>客户/招标单位：${escapeHtml(project.client || "")}</p>
       </div>
       <div>
         <p>报价日期：${new Date().toLocaleDateString("zh-CN")}</p>
+        <p>联系人：${escapeHtml(project.contact || "-")}</p>
         <p>报价有效期：${Number(project.validDays || 0)} 天</p>
       </div>
     </div>
     <div class="print-meta">
+      <p>客户/招标单位：${escapeHtml(project.client || "-")}</p>
       <p>代理机构：${escapeHtml(project.agency || "-")}</p>
       <p>开标日期：${project.deadline || "-"}</p>
       <p>交货期：${Number(project.deliveryDays || 0)} 天</p>
       <p>质保期：${Number(project.warrantyMonths || 0)} 个月</p>
       <p>付款方式：${escapeHtml(project.payment || "-")}</p>
       <p>税率：${formatPercent(Number(project.taxRate || 0))}</p>
-      <p>保证金/保函：${money.format(Number(project.bond || 0))}</p>
       <p>项目预算：${money.format(Number(project.budget || 0))}</p>
     </div>
     <table class="print-table">
@@ -336,40 +357,58 @@ function renderPrintSheet() {
           <th>序号</th>
           <th>设备/服务</th>
           <th>型号</th>
+          <th>供应商</th>
           <th>数量</th>
           <th>单位</th>
-          <th>报价单价</th>
+          <th>不含税单价</th>
           <th>不含税小计</th>
+          <th>含税小计</th>
+          <th>交期</th>
+          <th>质保</th>
           <th>参数/响应</th>
         </tr>
       </thead>
       <tbody>
         ${project.items
-          .map((item, index) => `
+          .map((item, index) => {
+            const row = calculateItem(item);
+            return `
             <tr>
               <td>${index + 1}</td>
               <td>${escapeHtml(item.name)}</td>
               <td>${escapeHtml(item.model)}</td>
+              <td>${escapeHtml(item.supplier || "-")}</td>
               <td>${Number(item.qty || 0)}</td>
               <td>${escapeHtml(item.unit)}</td>
               <td>${money.format(Number(item.quoteUnit || 0))}</td>
-              <td>${money.format(Number(item.qty || 0) * Number(item.quoteUnit || 0))}</td>
+              <td>${money.format(row.sales)}</td>
+              <td>${money.format(row.sales * (1 + taxRate))}</td>
+              <td>${numberValue(item.leadTime) ? `${numberValue(item.leadTime)} 天` : "-"}</td>
+              <td>${numberValue(item.warranty) ? `${numberValue(item.warranty)} 月` : "-"}</td>
               <td>${escapeHtml(item.spec)}</td>
             </tr>
-          `)
+          `;
+          })
           .join("")}
       </tbody>
     </table>
     <div class="print-total">
       <span>不含税合计：${money.format(calc.salesExTax)}</span>
-      <span>税额：${money.format(calc.taxAmount)}</span>
+      <span>税率/税额：${formatPercent(taxRate)} / ${money.format(calc.taxAmount)}</span>
       <strong>含税投标总价：${money.format(calc.totalQuote)}</strong>
+      <span>大写：${formatChineseMoney(calc.totalQuote)}</span>
+    </div>
+    <div class="print-terms">
+      <p>付款方式：${escapeHtml(project.payment || "-")}</p>
+      <p>交货期：${Number(project.deliveryDays || 0)} 天</p>
+      <p>质保期：${Number(project.warrantyMonths || 0)} 个月</p>
+      <p>报价有效期：${Number(project.validDays || 0)} 天</p>
     </div>
     <p class="print-note">备注：${escapeHtml(project.notes || "本报价以招标文件、技术响应及双方确认范围为准。")}</p>
     <div class="print-sign">
-      <span>报价单位：________________</span>
+      <span>报价单位：${escapeHtml(project.company || "________________")}</span>
       <span>授权代表：________________</span>
-      <span>日期：________________</span>
+      <span>公司盖章：________________</span>
     </div>
   `;
 }
@@ -380,6 +419,7 @@ function handleProjectInput(event) {
   const project = getCurrentProject();
   project[fieldName] = parseFieldValue(fieldName, event.target.value);
   updateProject(project, true);
+  if (fieldName === "targetMargin") renderItems();
 }
 
 function handleCostInput(event) {
@@ -405,10 +445,19 @@ function handleItemInput(event) {
   const project = getCurrentProject();
   const item = project.items.find((entry) => entry.id === row.dataset.itemId);
   if (!item) return;
-  item[fieldName] = ["qty", "costUnit", "quoteUnit"].includes(fieldName)
+  item[fieldName] = ["qty", "costUnit", "quoteUnit", "leadTime", "warranty"].includes(fieldName)
     ? numberValue(event.target.value)
     : event.target.value;
+  updateItemRowMetrics(row, item, project);
   updateProject(project, true);
+}
+
+function updateItemRowMetrics(row, item, project) {
+  const metric = row.querySelector(".row-margin");
+  if (!metric) return;
+  const itemCalc = calculateItem(item);
+  metric.textContent = formatPercent(itemCalc.margin);
+  metric.className = `row-margin ${itemCalc.margin < 0 ? "danger" : itemCalc.margin < numberValue(project.targetMargin) ? "warn" : ""}`.trim();
 }
 
 function handleItemClick(event) {
@@ -435,6 +484,15 @@ function updateProject(project, lightRender = false) {
   } else {
     render();
   }
+}
+
+function calculateItem(item) {
+  const qty = numberValue(item.qty);
+  const cost = qty * numberValue(item.costUnit);
+  const sales = qty * numberValue(item.quoteUnit);
+  const grossProfit = sales - cost;
+  const margin = sales > 0 ? grossProfit / sales : 0;
+  return { qty, cost, sales, grossProfit, margin };
 }
 
 function calculate(project) {
@@ -491,6 +549,12 @@ function getRisks(project, calc) {
   if (project.items.some((item) => !item.name || !item.model || !item.spec)) {
     risks.push({ level: "medium", text: "设备名称、型号或技术响应未填完整，可能影响技术评分。" });
   }
+  if (project.items.some((item) => !item.supplier)) {
+    risks.push({ level: "low", text: "部分设备未填写供应商，后续比价和供货追踪会比较麻烦。" });
+  }
+  if (project.items.some((item) => numberValue(item.costUnit) <= 0 || numberValue(item.quoteUnit) <= 0)) {
+    risks.push({ level: "medium", text: "部分设备成本或报价单价为 0，建议导入后复核单价。" });
+  }
   const missing = checklistItems.filter((item) => !project.checklist[item]);
   if (missing.length) {
     risks.push({ level: "medium", text: `还有 ${missing.length} 项投标资料未确认：${missing.slice(0, 3).join("、")}${missing.length > 3 ? "等" : ""}。` });
@@ -503,6 +567,9 @@ function exportCurrentCsv() {
   if (!project) return;
   const calc = calculate(project);
   const rows = [
+    ["报价编号", project.quoteNo],
+    ["报价单位", project.company],
+    ["联系人/电话", project.contact],
     ["项目名称", project.name],
     ["客户/招标单位", project.client],
     ["开标日期", project.deadline],
@@ -510,15 +577,19 @@ function exportCurrentCsv() {
     ["预计毛利", Math.round(calc.grossProfit)],
     ["毛利率", formatPercent(calc.margin)],
     [],
-    ["设备/服务", "型号", "数量", "单位", "成本单价", "报价单价", "不含税小计", "参数/响应"],
+    ["设备/服务", "型号", "供应商", "数量", "单位", "成本单价", "不含税报价", "不含税小计", "行毛利率", "交期(天)", "质保(月)", "参数/响应"],
     ...project.items.map((item) => [
       item.name,
       item.model,
+      item.supplier,
       item.qty,
       item.unit,
       item.costUnit,
       item.quoteUnit,
       numberValue(item.qty) * numberValue(item.quoteUnit),
+      formatPercent(calculateItem(item).margin),
+      item.leadTime,
+      item.warranty,
       item.spec
     ])
   ];
@@ -528,6 +599,190 @@ function exportCurrentCsv() {
   const link = document.createElement("a");
   link.href = url;
   link.download = `${sanitizeFileName(project.name || "招标报价")}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function handleItemsFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const rows = parseDelimitedText(text);
+    const items = rowsToItems(rows);
+    if (!items.length) {
+      setImportStatus("未识别到有效设备行", "error");
+      return;
+    }
+
+    const project = getCurrentProject();
+    if (!project) return;
+    const hasExistingItems = project.items.some((item) => item.name || item.model || numberValue(item.costUnit) || numberValue(item.quoteUnit));
+    if (hasExistingItems && !window.confirm(`导入会替换当前 ${project.items.length} 条分项报价，是否继续？`)) {
+      return;
+    }
+
+    project.items = items;
+    updateProject(project);
+    setImportStatus(`已导入 ${items.length} 条分项报价`, "success");
+  } catch {
+    setImportStatus("文件读取失败，请检查文件格式", "error");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+function downloadImportTemplate() {
+  const rows = [
+    ["设备名称", "型号", "供应商", "数量", "单位", "成本单价", "不含税报价", "交期(天)", "质保(月)", "参数/响应"],
+    ["燃气调压计量撬", "RX-500", "示例供应商", 2, "套", 285000, 380000, 35, 24, "满足流量、压力、过滤、计量及防爆要求"],
+    ["远程监测终端", "RTU-4G", "示例供应商", 2, "套", 18000, 32000, 20, 12, "支持压力、温度、流量数据上传"]
+  ];
+  downloadCsv(rows, "分项报价导入模板.csv");
+}
+
+function setImportStatus(text, type = "") {
+  els.importStatus.textContent = text;
+  els.importStatus.className = `import-status ${type}`.trim();
+}
+
+function parseDelimitedText(text) {
+  const cleanText = String(text || "").replace(/^\ufeff/, "");
+  const delimiter = detectDelimiter(cleanText);
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < cleanText.length; index += 1) {
+    const char = cleanText[index];
+    const next = cleanText[index + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      row.push(cleanCell(cell));
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cleanCell(cell));
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  if (cell || row.length) {
+    row.push(cleanCell(cell));
+    rows.push(row);
+  }
+
+  return rows.filter((entry) => entry.some(Boolean));
+}
+
+function detectDelimiter(text) {
+  const firstLine = text.split(/\r?\n/).find((line) => line.trim()) || "";
+  const candidates = [",", "\t", ";"];
+  return candidates
+    .map((delimiter) => ({ delimiter, count: firstLine.split(delimiter).length }))
+    .sort((a, b) => b.count - a.count)[0].delimiter;
+}
+
+function rowsToItems(rows) {
+  if (!rows.length) return [];
+  const headerIndex = rows.findIndex((row) => row.some((cell) => resolveItemField(cell)));
+  const hasHeader = headerIndex >= 0;
+  const header = hasHeader ? rows[headerIndex] : [];
+  const body = hasHeader ? rows.slice(headerIndex + 1) : rows;
+  const mapping = hasHeader ? buildItemColumnMap(header) : fallbackItemColumnMap();
+
+  return body
+    .map((row) => rowToItem(row, mapping))
+    .filter((item) => item.name || item.model || item.supplier || numberValue(item.costUnit) || numberValue(item.quoteUnit));
+}
+
+function buildItemColumnMap(header) {
+  return header.reduce((mapping, cell, index) => {
+    const fieldName = resolveItemField(cell);
+    if (fieldName && mapping[fieldName] === undefined) mapping[fieldName] = index;
+    return mapping;
+  }, {});
+}
+
+function fallbackItemColumnMap() {
+  return {
+    name: 0,
+    model: 1,
+    supplier: 2,
+    qty: 3,
+    unit: 4,
+    costUnit: 5,
+    quoteUnit: 6,
+    leadTime: 7,
+    warranty: 8,
+    spec: 9
+  };
+}
+
+function rowToItem(row, mapping) {
+  const value = (fieldName) => mapping[fieldName] === undefined ? "" : row[mapping[fieldName]];
+  return normalizeItem({
+    id: uid(),
+    name: value("name"),
+    model: value("model"),
+    supplier: value("supplier"),
+    qty: numberValue(value("qty")) || 1,
+    unit: value("unit") || "台",
+    costUnit: numberValue(value("costUnit")),
+    quoteUnit: numberValue(value("quoteUnit")),
+    leadTime: numberValue(value("leadTime")),
+    warranty: numberValue(value("warranty")),
+    spec: value("spec")
+  });
+}
+
+function resolveItemField(header) {
+  const text = normalizeHeader(header);
+  if (!text) return "";
+  if (["设备服务", "设备名称", "产品名称", "物料名称", "名称", "设备", "项目"].includes(text)) return "name";
+  if (["型号", "规格型号", "型号规格", "规格", "规格参数"].includes(text)) return "model";
+  if (["供应商", "供货商", "厂家", "品牌", "制造商"].includes(text)) return "supplier";
+  if (["数量", "qty", "数目"].includes(text)) return "qty";
+  if (["单位", "unit"].includes(text)) return "unit";
+  if (text.includes("成本") || text.includes("采购") || text.includes("进货")) return "costUnit";
+  if (text.includes("报价") || text.includes("销售") || text === "单价" || text.includes("投标单价")) return "quoteUnit";
+  if (text.includes("交期") || text.includes("交货期") || text.includes("供货期")) return "leadTime";
+  if (text.includes("质保") || text.includes("保修")) return "warranty";
+  if (text.includes("参数") || text.includes("响应") || text.includes("备注") || text.includes("说明")) return "spec";
+  return "";
+}
+
+function normalizeHeader(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_：:／/\\（）(),，。.-]/g, "")
+    .replace(/不含税|含税|元|天|月/g, "");
+}
+
+function cleanCell(value) {
+  return String(value ?? "").trim();
+}
+
+function downloadCsv(rows, fileName) {
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -575,10 +830,63 @@ function metric(label, value, subtext) {
   `;
 }
 
+function normalizeState(nextState) {
+  const projects = nextState.projects.map(normalizeProject);
+  const firstProject = projects[0];
+  return {
+    ...nextState,
+    projects,
+    currentId: projects.some((project) => project.id === nextState.currentId) ? nextState.currentId : firstProject?.id
+  };
+}
+
+function normalizeProject(project) {
+  const checklist = Object.fromEntries(checklistItems.map((item) => [item, Boolean(project.checklist?.[item])]));
+  return {
+    ...project,
+    id: project.id || uid(),
+    quoteNo: project.quoteNo || makeQuoteNo(),
+    company: project.company || "",
+    contact: project.contact || "",
+    costs: {
+      freight: 0,
+      installation: 0,
+      warranty: 0,
+      service: 0,
+      finance: 0,
+      misc: 0,
+      ...(project.costs || {})
+    },
+    checklist,
+    items: Array.isArray(project.items) && project.items.length
+      ? project.items.map(normalizeItem)
+      : [createItem()]
+  };
+}
+
+function normalizeItem(item) {
+  return {
+    id: item.id || uid(),
+    name: item.name || "",
+    model: item.model || "",
+    supplier: item.supplier || "",
+    qty: numberValue(item.qty) || 1,
+    unit: item.unit || "台",
+    costUnit: numberValue(item.costUnit),
+    quoteUnit: numberValue(item.quoteUnit),
+    leadTime: numberValue(item.leadTime),
+    warranty: numberValue(item.warranty),
+    spec: item.spec || ""
+  };
+}
+
 function createProject() {
   const checklist = Object.fromEntries(checklistItems.map((item) => [item, false]));
   return {
     id: uid(),
+    quoteNo: makeQuoteNo(),
+    company: "",
+    contact: "",
     name: "新招标项目",
     client: "",
     agency: "",
@@ -611,10 +919,13 @@ function createItem() {
     id: uid(),
     name: "",
     model: "",
+    supplier: "",
     qty: 1,
     unit: "台",
     costUnit: 0,
     quoteUnit: 0,
+    leadTime: 0,
+    warranty: 0,
     spec: ""
   };
 }
@@ -645,20 +956,26 @@ function seedProjects() {
       id: uid(),
       name: "燃气调压计量撬",
       model: "RX-500",
+      supplier: "华北燃控设备",
       qty: 2,
       unit: "套",
       costUnit: 285000,
       quoteUnit: 380000,
+      leadTime: 35,
+      warranty: 24,
       spec: "满足流量、压力、过滤、计量及防爆要求"
     },
     {
       id: uid(),
       name: "远程监测终端",
       model: "RTU-4G",
+      supplier: "联控自动化",
       qty: 2,
       unit: "套",
       costUnit: 18000,
       quoteUnit: 32000,
+      leadTime: 20,
+      warranty: 12,
       spec: "支持压力、温度、流量数据上传"
     }
   ];
@@ -690,20 +1007,26 @@ function seedProjects() {
       id: uid(),
       name: "循环水泵",
       model: "LQ-220",
+      supplier: "利泉泵业",
       qty: 4,
       unit: "台",
       costUnit: 62000,
       quoteUnit: 82000,
+      leadTime: 15,
+      warranty: 18,
       spec: "满足扬程、流量及变频控制要求"
     },
     {
       id: uid(),
       name: "变频控制柜",
       model: "VFD-75",
+      supplier: "安控电气",
       qty: 2,
       unit: "台",
       costUnit: 44000,
       quoteUnit: 65000,
+      leadTime: 20,
+      warranty: 18,
       spec: "支持远程启停和故障报警"
     }
   ];
@@ -723,12 +1046,58 @@ function parseFieldValue(fieldName, value) {
 }
 
 function numberValue(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const text = String(value ?? "").trim();
+  if (!text) return 0;
+  const isPercent = text.endsWith("%");
+  const cleaned = text.replace(/[,%￥¥\s]/g, "");
+  const direct = Number(cleaned);
+  if (Number.isFinite(direct)) return isPercent ? direct / 100 : direct;
+  const match = cleaned.match(/-?\d+(\.\d+)?/);
+  if (!match) return 0;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? (isPercent ? parsed / 100 : parsed) : 0;
 }
 
 function formatPercent(value) {
   return `${(numberValue(value) * 100).toFixed(1)}%`;
+}
+
+function formatChineseMoney(value) {
+  const numeric = numberValue(value);
+  const amount = Math.round(Math.abs(numeric) * 100);
+  if (!amount) return "零元整";
+
+  const digits = ["零", "壹", "贰", "叁", "肆", "伍", "陆", "柒", "捌", "玖"];
+  const bigUnits = ["元", "万", "亿"];
+  const smallUnits = ["", "拾", "佰", "仟"];
+  let integer = Math.floor(amount / 100);
+  const jiao = Math.floor((amount % 100) / 10);
+  const fen = amount % 10;
+  let integerText = "";
+
+  for (let sectionIndex = 0; integer > 0 && sectionIndex < bigUnits.length; sectionIndex += 1) {
+    let section = "";
+    for (let digitIndex = 0; digitIndex < 4; digitIndex += 1) {
+      const digit = integer % 10;
+      if (digit) {
+        section = `${digits[digit]}${smallUnits[digitIndex]}${section}`;
+      } else if (section && !section.startsWith("零")) {
+        section = `零${section}`;
+      }
+      integer = Math.floor(integer / 10);
+    }
+    section = section.replace(/零+/g, "零").replace(/零$/g, "");
+    if (section) integerText = `${section}${bigUnits[sectionIndex]}${integerText}`;
+  }
+
+  integerText = integerText
+    .replace(/零+/g, "零")
+    .replace(/零(万|亿|元)/g, "$1")
+    .replace(/亿万/g, "亿") || "零元";
+
+  const fractionText = `${jiao ? `${digits[jiao]}角` : ""}${fen ? `${digits[fen]}分` : ""}`;
+  return `${numeric < 0 ? "负" : ""}${integerText}${fractionText || "整"}`;
 }
 
 function clamp(value, min, max) {
@@ -747,6 +1116,13 @@ function nextDate(offset) {
   const date = new Date();
   date.setDate(date.getDate() + offset);
   return date.toISOString().slice(0, 10);
+}
+
+function makeQuoteNo() {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10).replaceAll("-", "");
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `QT-${date}-${suffix}`;
 }
 
 function uid() {

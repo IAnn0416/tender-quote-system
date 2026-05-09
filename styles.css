@@ -96,6 +96,7 @@ svg {
 }
 
 .topbar-actions,
+.panel-actions,
 .panel-title,
 .rail-head,
 .status-tabs,
@@ -110,6 +111,16 @@ svg {
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.panel-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.file-input {
+  display: none;
 }
 
 .button,
@@ -401,7 +412,7 @@ svg {
 
 .quote-table {
   width: 100%;
-  min-width: 960px;
+  min-width: 1320px;
   border-collapse: collapse;
 }
 
@@ -434,6 +445,50 @@ svg {
 
 .quote-table .note {
   min-width: 210px;
+}
+
+.row-margin {
+  min-height: 38px;
+  min-width: 76px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  color: #166534;
+  background: #dcfce7;
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.row-margin.warn {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.row-margin.danger {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.import-status {
+  min-height: 0;
+  margin: -4px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.import-status.success {
+  color: var(--green);
+}
+
+.import-status.error {
+  color: var(--red);
+}
+
+.import-status:empty {
+  display: none;
 }
 
 .row-delete {
@@ -690,9 +745,14 @@ svg {
     font-size: 24px;
   }
 
+  .print-company {
+    font-weight: 800;
+  }
+
   .print-title p,
   .print-meta p,
-  .print-note {
+  .print-note,
+  .print-terms p {
     margin: 4px 0;
     font-size: 12px;
   }
@@ -707,7 +767,7 @@ svg {
   .print-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .print-table th,
@@ -732,6 +792,15 @@ svg {
 
   .print-total strong {
     font-size: 18px;
+  }
+
+  .print-terms {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    border: 1px solid #111827;
+    padding: 8px;
   }
 
   .print-sign {

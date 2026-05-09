@@ -26,6 +26,9 @@
       <symbol id="i-download" viewBox="0 0 24 24">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
       </symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+      </symbol>
       <symbol id="i-trash" viewBox="0 0 24 24">
         <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
         <path d="M10 11v6M14 11v6" />
@@ -97,21 +100,37 @@
                 <span class="section-kicker">设备清单</span>
                 <h2 id="itemsTitle">分项报价</h2>
               </div>
-              <button class="button secondary" id="addItemBtn" type="button">
-                <svg><use href="#i-plus"></use></svg>
-                添加设备
-              </button>
+              <div class="panel-actions">
+                <input id="itemsFileInput" class="file-input" type="file" accept=".csv,.tsv,.txt" />
+                <button class="button ghost" id="importItemsBtn" type="button">
+                  <svg><use href="#i-upload"></use></svg>
+                  导入清单
+                </button>
+                <button class="button ghost" id="templateBtn" type="button">
+                  <svg><use href="#i-download"></use></svg>
+                  下载模板
+                </button>
+                <button class="button secondary" id="addItemBtn" type="button">
+                  <svg><use href="#i-plus"></use></svg>
+                  添加设备
+                </button>
+              </div>
             </div>
+            <div class="import-status" id="importStatus" aria-live="polite"></div>
             <div class="table-wrap">
               <table class="quote-table" id="itemsTable">
                 <thead>
                   <tr>
                     <th>设备/服务</th>
                     <th>型号</th>
+                    <th>供应商</th>
                     <th>数量</th>
                     <th>单位</th>
                     <th>成本单价</th>
-                    <th>报价单价</th>
+                    <th>不含税报价</th>
+                    <th>行毛利</th>
+                    <th>交期</th>
+                    <th>质保</th>
                     <th>参数/响应</th>
                     <th></th>
                   </tr>
