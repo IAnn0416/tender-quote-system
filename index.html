@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>招标报价系统</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <svg aria-hidden="true" class="icon-sprite">
+      <symbol id="i-plus" viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24">
+        <rect x="9" y="9" width="11" height="11" rx="2" />
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+      </symbol>
+      <symbol id="i-printer" viewBox="0 0 24 24">
+        <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+        <path d="M6 14h12v8H6zM18 13h.01" />
+      </symbol>
+      <symbol id="i-save" viewBox="0 0 24 24">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+        <path d="M17 21v-8H7v8M7 3v5h8" />
+      </symbol>
+      <symbol id="i-download" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+      </symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24">
+        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+        <path d="M10 11v6M14 11v6" />
+      </symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+        <path d="M12 9v4M12 17h.01" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24">
+        <path d="M20 6 9 17l-5-5" />
+      </symbol>
+    </svg>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">传统能源设备</p>
+          <h1>招标报价工作台</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="button ghost" id="saveBtn" type="button">
+            <svg><use href="#i-save"></use></svg>
+            保存
+          </button>
+          <button class="button ghost" id="exportBtn" type="button">
+            <svg><use href="#i-download"></use></svg>
+            导出表格
+          </button>
+          <button class="button primary" id="printBtn" type="button">
+            <svg><use href="#i-printer"></use></svg>
+            打印报价
+          </button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="project-rail" aria-label="项目列表">
+          <div class="rail-head">
+            <div>
+              <span class="section-kicker">项目</span>
+              <strong id="projectCount">0 个</strong>
+            </div>
+            <button class="icon-button" id="newProjectBtn" type="button" aria-label="新增项目" title="新增项目">
+              <svg><use href="#i-plus"></use></svg>
+            </button>
+          </div>
+          <div class="status-tabs" id="statusTabs"></div>
+          <div class="project-list" id="projectList"></div>
+        </aside>
+
+        <main class="main-panel">
+          <section class="panel project-editor" aria-labelledby="projectTitle">
+            <div class="panel-title">
+              <div>
+                <span class="section-kicker">招标信息</span>
+                <h2 id="projectTitle">项目</h2>
+              </div>
+              <button class="button ghost" id="duplicateBtn" type="button">
+                <svg><use href="#i-copy"></use></svg>
+                复制项目
+              </button>
+            </div>
+            <form class="form-grid" id="projectForm"></form>
+          </section>
+
+          <section class="panel quote-table-panel" aria-labelledby="itemsTitle">
+            <div class="panel-title compact">
+              <div>
+                <span class="section-kicker">设备清单</span>
+                <h2 id="itemsTitle">分项报价</h2>
+              </div>
+              <button class="button secondary" id="addItemBtn" type="button">
+                <svg><use href="#i-plus"></use></svg>
+                添加设备
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table class="quote-table" id="itemsTable">
+                <thead>
+                  <tr>
+                    <th>设备/服务</th>
+                    <th>型号</th>
+                    <th>数量</th>
+                    <th>单位</th>
+                    <th>成本单价</th>
+                    <th>报价单价</th>
+                    <th>参数/响应</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="cost-check-grid">
+            <div class="panel">
+              <div class="panel-title compact">
+                <div>
+                  <span class="section-kicker">内部成本</span>
+                  <h2>招标费用</h2>
+                </div>
+              </div>
+              <form class="cost-grid" id="costForm"></form>
+            </div>
+
+            <div class="panel">
+              <div class="panel-title compact">
+                <div>
+                  <span class="section-kicker">投标资料</span>
+                  <h2>合规清单</h2>
+                </div>
+              </div>
+              <div class="checklist" id="checklist"></div>
+            </div>
+          </section>
+        </main>
+
+        <aside class="summary-panel" aria-label="报价汇总">
+          <section class="panel sticky-summary">
+            <div class="panel-title compact">
+              <div>
+                <span class="section-kicker">测算结果</span>
+                <h2>报价汇总</h2>
+              </div>
+              <span class="saved-state" id="savedState">已同步</span>
+            </div>
+            <div class="metric-stack" id="metrics"></div>
+            <div class="margin-band" id="marginBand"></div>
+            <div class="risk-box">
+              <div class="risk-title">
+                <svg><use href="#i-alert"></use></svg>
+                <strong>风险提醒</strong>
+              </div>
+              <div id="riskList"></div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+
+    <section id="printSheet" aria-label="打印报价单"></section>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
