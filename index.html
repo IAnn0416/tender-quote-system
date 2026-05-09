@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>招标报价系统</title>
-    <link rel="stylesheet" href="./styles.css?v=20260509-scenarios" />
+    <link rel="stylesheet" href="./styles.css?v=20260509-workbench" />
   </head>
   <body>
     <svg aria-hidden="true" class="icon-sprite">
@@ -55,11 +55,15 @@
           </button>
           <button class="button ghost" id="exportBtn" type="button">
             <svg><use href="#i-download"></use></svg>
-            导出表格
+            内部表格
           </button>
-          <button class="button primary" id="printBtn" type="button">
-            <svg><use href="#i-printer"></use></svg>
-            打印报价
+          <button class="button ghost" id="customerQuoteBtn" type="button">
+            <svg><use href="#i-download"></use></svg>
+            导出客户版
+          </button>
+          <button class="button primary" id="internalQuoteBtn" type="button">
+            <svg><use href="#i-download"></use></svg>
+            导出内部版
           </button>
         </div>
       </header>
@@ -189,6 +193,6 @@
 
     <section id="printSheet" aria-label="打印报价单"></section>
 
-    <script src="./app.js?v=20260509-scenarios"></script>
+    <script src="./app.js?v=20260509-workbench"></script>
   </body>
 </html>

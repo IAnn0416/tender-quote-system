@@ -295,19 +295,31 @@ svg {
   background: #fef3c7;
 }
 
-.pill.quoted {
+.pill.review {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.pill.approved {
   color: #0f766e;
   background: #ccfbf1;
 }
 
-.pill.submitted {
+.pill.sent {
   color: #1d4ed8;
   background: #dbeafe;
 }
 
-.pill.won {
+.pill.archived {
   color: #166534;
   background: #dcfce7;
+}
+
+.pill.quoted,
+.pill.submitted,
+.pill.won {
+  color: #0f766e;
+  background: #ccfbf1;
 }
 
 .pill.lost {
@@ -530,6 +542,8 @@ svg {
 .sticky-summary {
   position: sticky;
   top: 94px;
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
 }
 
 .saved-state {
@@ -839,6 +853,11 @@ svg {
 }
 
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
   body {
     background: #fff;
   }
@@ -873,10 +892,16 @@ svg {
     font-weight: 800;
   }
 
+  .print-version {
+    font-weight: 700;
+    color: #4b5563;
+  }
+
   .print-title p,
   .print-meta p,
   .print-note,
-  .print-terms p {
+  .print-terms p,
+  .print-risk p {
     margin: 4px 0;
     font-size: 12px;
   }
@@ -892,6 +917,10 @@ svg {
     width: 100%;
     border-collapse: collapse;
     font-size: 11px;
+  }
+
+  .print-table.internal {
+    font-size: 9.5px;
   }
 
   .print-table th,
@@ -916,6 +945,18 @@ svg {
 
   .print-total strong {
     font-size: 18px;
+  }
+
+  .print-risk {
+    margin-top: 14px;
+    border: 1px solid #b42318;
+    padding: 8px 10px;
+    color: #7f1d1d;
+  }
+
+  .print-risk strong {
+    display: block;
+    margin-bottom: 4px;
   }
 
   .print-terms {

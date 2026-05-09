@@ -1,11 +1,11 @@
 const STORAGE_KEY = "tender-quote-mvp-v2";
 
 const statusLabels = {
-  draft: "待报价",
-  quoted: "已报价",
-  submitted: "已投标",
-  won: "中标",
-  lost: "未中标"
+  draft: "草稿",
+  review: "待审核",
+  approved: "已审核",
+  sent: "已发客户",
+  archived: "已归档"
 };
 
 const checklistItems = [
@@ -92,11 +92,8 @@ document.querySelector("#importItemsBtn").addEventListener("click", () => {
   els.itemsFileInput.click();
 });
 document.querySelector("#templateBtn").addEventListener("click", downloadImportTemplate);
-
-document.querySelector("#printBtn").addEventListener("click", () => {
-  renderPrintSheet();
-  window.print();
-});
+document.querySelector("#customerQuoteBtn").addEventListener("click", () => exportQuoteSheet("customer"));
+document.querySelector("#internalQuoteBtn").addEventListener("click", () => exportQuoteSheet("internal"));
 
 els.statusTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-status]");
@@ -302,9 +299,11 @@ function renderSummary() {
   const calc = calculate(project);
   const risks = getRisks(project, calc);
   els.metrics.innerHTML = `
-    ${metric("投标含税总价", money.format(calc.totalQuote), `不含税 ${money.format(calc.salesExTax)} · 税额 ${money.format(calc.taxAmount)}`)}
-    ${metric("内部总成本", money.format(calc.totalCost), `设备成本 ${money.format(calc.itemCost)} · 费用 ${money.format(calc.extraCost)}`)}
-    ${metric("预计毛利", money.format(calc.grossProfit), `毛利率 ${formatPercent(calc.margin)} · 目标 ${formatPercent(calc.targetMargin)}`)}
+    ${metric("总成本", money.format(calc.totalCost), `设备 ${money.format(calc.itemCost)} · 费用 ${money.format(calc.extraCost)}`)}
+    ${metric("总报价", money.format(calc.salesExTax), "当前分项报价合计，不含税")}
+    ${metric("毛利额", money.format(calc.grossProfit), `报价减总成本`)}
+    ${metric("毛利率", formatPercent(calc.margin), `目标 ${formatPercent(calc.targetMargin)}`)}
+    ${metric("含税总价", money.format(calc.totalQuote), `税额 ${money.format(calc.taxAmount)} · 税率 ${formatPercent(calc.taxRate)}`)}
     ${metric("亏损警戒线", money.format(calc.breakEvenTotalQuote), `低于该含税价会亏损，不含税 ${money.format(calc.breakEvenSalesExTax)}`)}
   `;
   renderQuoteScenarios(project, calc);
@@ -355,16 +354,19 @@ function renderQuoteScenarios(project, calc) {
   `;
 }
 
-function renderPrintSheet() {
+function renderPrintSheet(mode = "customer") {
   const project = getCurrentProject();
   if (!project) return;
   const calc = calculate(project);
   const taxRate = numberValue(project.taxRate);
+  const isInternal = mode === "internal";
+  const risks = getRisks(project, calc);
   els.printSheet.innerHTML = `
     <div class="print-title">
       <div>
         <p class="print-company">${escapeHtml(project.company || "报价单位")}</p>
-        <h1>投标报价单</h1>
+        <h1>${isInternal ? "内部报价审核单" : "客户版报价单"}</h1>
+        <p class="print-version">${isInternal ? "内部使用：含成本、利润、供应商信息" : "对外发送版本"}</p>
         <p>报价编号：${escapeHtml(project.quoteNo || "-")}</p>
         <p>项目名称：${escapeHtml(project.name || "")}</p>
       </div>
@@ -384,53 +386,39 @@ function renderPrintSheet() {
       <p>税率：${formatPercent(Number(project.taxRate || 0))}</p>
       <p>项目预算：${money.format(Number(project.budget || 0))}</p>
     </div>
-    <table class="print-table">
+    <table class="print-table ${isInternal ? "internal" : "customer"}">
       <thead>
-        <tr>
-          <th>序号</th>
-          <th>设备/服务</th>
-          <th>型号</th>
-          <th>供应商</th>
-          <th>数量</th>
-          <th>单位</th>
-          <th>不含税单价</th>
-          <th>不含税小计</th>
-          <th>含税小计</th>
-          <th>交期</th>
-          <th>质保</th>
-          <th>参数/响应</th>
-        </tr>
+        ${isInternal ? internalPrintHeader() : customerPrintHeader()}
       </thead>
       <tbody>
         ${project.items
           .map((item, index) => {
             const row = calculateItem(item);
-            return `
-            <tr>
-              <td>${index + 1}</td>
-              <td>${escapeHtml(item.name)}</td>
-              <td>${escapeHtml(item.model)}</td>
-              <td>${escapeHtml(item.supplier || "-")}</td>
-              <td>${Number(item.qty || 0)}</td>
-              <td>${escapeHtml(item.unit)}</td>
-              <td>${money.format(Number(item.quoteUnit || 0))}</td>
-              <td>${money.format(row.sales)}</td>
-              <td>${money.format(row.sales * (1 + taxRate))}</td>
-              <td>${numberValue(item.leadTime) ? `${numberValue(item.leadTime)} 天` : "-"}</td>
-              <td>${numberValue(item.warranty) ? `${numberValue(item.warranty)} 月` : "-"}</td>
-              <td>${escapeHtml(item.spec)}</td>
-            </tr>
-          `;
+            return isInternal
+              ? internalPrintRow(item, row, index, taxRate)
+              : customerPrintRow(item, row, index, taxRate);
           })
           .join("")}
       </tbody>
     </table>
     <div class="print-total">
-      <span>不含税合计：${money.format(calc.salesExTax)}</span>
-      <span>税率/税额：${formatPercent(taxRate)} / ${money.format(calc.taxAmount)}</span>
-      <strong>含税投标总价：${money.format(calc.totalQuote)}</strong>
-      <span>大写：${formatChineseMoney(calc.totalQuote)}</span>
+      ${isInternal
+        ? `
+          <span>总成本：${money.format(calc.totalCost)}</span>
+          <span>不含税报价：${money.format(calc.salesExTax)}</span>
+          <span>毛利额：${money.format(calc.grossProfit)}</span>
+          <span>毛利率：${formatPercent(calc.margin)}</span>
+          <strong>含税总价：${money.format(calc.totalQuote)}</strong>
+          <span>亏损警戒线：${money.format(calc.breakEvenTotalQuote)} 含税</span>
+        `
+        : `
+          <span>不含税合计：${money.format(calc.salesExTax)}</span>
+          <span>税率/税额：${formatPercent(taxRate)} / ${money.format(calc.taxAmount)}</span>
+          <strong>含税投标总价：${money.format(calc.totalQuote)}</strong>
+          <span>大写：${formatChineseMoney(calc.totalQuote)}</span>
+        `}
     </div>
+    ${isInternal ? renderInternalPrintRisks(risks) : ""}
     <div class="print-terms">
       <p>付款方式：${escapeHtml(project.payment || "-")}</p>
       <p>交货期：${Number(project.deliveryDays || 0)} 天</p>
@@ -442,6 +430,140 @@ function renderPrintSheet() {
       <span>报价单位：${escapeHtml(project.company || "________________")}</span>
       <span>授权代表：________________</span>
       <span>公司盖章：________________</span>
+    </div>
+  `;
+}
+
+function exportQuoteSheet(mode) {
+  renderPrintSheet(mode);
+  const project = getCurrentProject();
+  const suffix = mode === "internal" ? "内部版报价单" : "客户版报价单";
+  const fileName = `${sanitizeFileName(project?.name || "招标报价")}-${suffix}.html`;
+  const html = buildQuoteSheetHtml(els.printSheet.innerHTML, suffix);
+  downloadText(html, fileName, "text/html;charset=utf-8");
+  setSaved(`${suffix}已导出`);
+}
+
+function buildQuoteSheetHtml(content, title) {
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      body { margin: 0; padding: 24px; color: #111827; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; }
+      .print-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 2px solid #111827; padding-bottom: 16px; margin-bottom: 18px; }
+      .print-title h1 { margin: 0; font-size: 24px; }
+      .print-company { font-weight: 800; }
+      .print-version { font-weight: 700; color: #4b5563; }
+      .print-title p, .print-meta p, .print-note, .print-terms p, .print-risk p { margin: 4px 0; font-size: 12px; }
+      .print-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+      .print-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      .print-table.internal { font-size: 9.5px; }
+      .print-table th, .print-table td { border: 1px solid #111827; padding: 7px; text-align: left; vertical-align: top; }
+      .print-table th { background: #f3f4f6; }
+      .print-total { margin-top: 16px; display: grid; justify-content: end; gap: 5px; font-size: 13px; }
+      .print-total strong { font-size: 18px; }
+      .print-risk { margin-top: 14px; border: 1px solid #b42318; padding: 8px 10px; color: #7f1d1d; }
+      .print-risk strong { display: block; margin-bottom: 4px; }
+      .print-terms { margin-top: 14px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; border: 1px solid #111827; padding: 8px; }
+      .print-sign { margin-top: 42px; display: flex; justify-content: space-between; gap: 32px; font-size: 13px; }
+      @media print { @page { size: A4 landscape; margin: 12mm; } body { padding: 0; } }
+    </style>
+  </head>
+  <body>${content}</body>
+</html>`;
+}
+
+function customerPrintHeader() {
+  return `
+    <tr>
+      <th>序号</th>
+      <th>设备/服务</th>
+      <th>型号</th>
+      <th>数量</th>
+      <th>单位</th>
+      <th>不含税单价</th>
+      <th>不含税小计</th>
+      <th>含税小计</th>
+      <th>交期</th>
+      <th>质保</th>
+      <th>参数/响应</th>
+    </tr>
+  `;
+}
+
+function internalPrintHeader() {
+  return `
+    <tr>
+      <th>序号</th>
+      <th>设备/服务</th>
+      <th>型号</th>
+      <th>供应商</th>
+      <th>数量</th>
+      <th>单位</th>
+      <th>成本单价</th>
+      <th>成本小计</th>
+      <th>报价单价</th>
+      <th>报价小计</th>
+      <th>含税小计</th>
+      <th>毛利额</th>
+      <th>毛利率</th>
+      <th>交期</th>
+      <th>质保</th>
+      <th>参数/响应</th>
+    </tr>
+  `;
+}
+
+function customerPrintRow(item, row, index, taxRate) {
+  return `
+    <tr>
+      <td>${index + 1}</td>
+      <td>${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(item.model)}</td>
+      <td>${Number(item.qty || 0)}</td>
+      <td>${escapeHtml(item.unit)}</td>
+      <td>${money.format(Number(item.quoteUnit || 0))}</td>
+      <td>${money.format(row.sales)}</td>
+      <td>${money.format(row.sales * (1 + taxRate))}</td>
+      <td>${numberValue(item.leadTime) ? `${numberValue(item.leadTime)} 天` : "-"}</td>
+      <td>${numberValue(item.warranty) ? `${numberValue(item.warranty)} 月` : "-"}</td>
+      <td>${escapeHtml(item.spec)}</td>
+    </tr>
+  `;
+}
+
+function internalPrintRow(item, row, index, taxRate) {
+  return `
+    <tr>
+      <td>${index + 1}</td>
+      <td>${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(item.model)}</td>
+      <td>${escapeHtml(item.supplier || "-")}</td>
+      <td>${Number(item.qty || 0)}</td>
+      <td>${escapeHtml(item.unit)}</td>
+      <td>${money.format(Number(item.costUnit || 0))}</td>
+      <td>${money.format(row.cost)}</td>
+      <td>${money.format(Number(item.quoteUnit || 0))}</td>
+      <td>${money.format(row.sales)}</td>
+      <td>${money.format(row.sales * (1 + taxRate))}</td>
+      <td>${money.format(row.grossProfit)}</td>
+      <td>${formatPercent(row.margin)}</td>
+      <td>${numberValue(item.leadTime) ? `${numberValue(item.leadTime)} 天` : "-"}</td>
+      <td>${numberValue(item.warranty) ? `${numberValue(item.warranty)} 月` : "-"}</td>
+      <td>${escapeHtml(item.spec)}</td>
+    </tr>
+  `;
+}
+
+function renderInternalPrintRisks(risks) {
+  if (!risks.length) return `<div class="print-risk"><strong>内部风险提醒：</strong><p>当前报价未识别出明显风险。</p></div>`;
+  return `
+    <div class="print-risk">
+      <strong>内部风险提醒</strong>
+      ${risks.map((risk) => `<p>${escapeHtml(risk.text)}</p>`).join("")}
     </div>
   `;
 }
@@ -626,13 +748,20 @@ function applyScenarioPrice(project, targetSalesExTax) {
 function getRisks(project, calc) {
   const risks = [];
   const budget = numberValue(project.budget);
+  const lowMarginLine = Math.max(0.08, calc.targetMargin);
   if (calc.totalQuote > budget && budget > 0) {
     risks.push({ level: "high", text: `含税总价超过预算 ${money.format(calc.totalQuote - budget)}，容易被价格线卡住。` });
   }
+  if (calc.totalCost > calc.salesExTax) {
+    risks.push({ level: "high", text: `成本高于报价 ${money.format(calc.totalCost - calc.salesExTax)}，当前报价会产生亏损。` });
+  }
+  if (project.items.some((item) => numberValue(item.costUnit) > numberValue(item.quoteUnit) && numberValue(item.quoteUnit) > 0)) {
+    risks.push({ level: "high", text: "存在设备成本单价高于报价单价，请复核供应商底价和报价策略。" });
+  }
   if (calc.margin < 0) {
-    risks.push({ level: "high", text: "当前报价为负毛利，建议立即复核成本和单价。" });
-  } else if (calc.margin < calc.targetMargin) {
-    risks.push({ level: "medium", text: `毛利率低于目标 ${formatPercent(calc.targetMargin)}，至少需要补到 ${money.format(calc.minTotalQuote)} 含税价。` });
+    risks.push({ level: "high", text: "毛利率为负，建议立即复核成本、费用和报价单价。" });
+  } else if (calc.margin < lowMarginLine) {
+    risks.push({ level: "medium", text: `毛利率过低，当前 ${formatPercent(calc.margin)}，目标/安全线为 ${formatPercent(lowMarginLine)}。` });
   }
   if (!project.deadline) {
     risks.push({ level: "medium", text: "未填写开标日期，容易漏掉递交时间。" });
@@ -643,13 +772,20 @@ function getRisks(project, calc) {
     }
   }
   if (!project.payment) risks.push({ level: "medium", text: "未填写付款方式，垫资成本可能被低估。" });
-  if (numberValue(project.deliveryDays) <= 0) risks.push({ level: "low", text: "未填写交货期，报价单条款不完整。" });
-  if (numberValue(project.warrantyMonths) <= 0) risks.push({ level: "low", text: "未填写质保期，售后成本预留可能不足。" });
+  if (numberValue(project.deliveryDays) <= 0 || project.items.some((item) => numberValue(item.leadTime) <= 0)) {
+    risks.push({ level: "medium", text: "交期缺失：项目交货期或部分设备交期未填写，客户交付承诺不完整。" });
+  }
+  if (numberValue(project.warrantyMonths) <= 0 || project.items.some((item) => numberValue(item.warranty) <= 0)) {
+    risks.push({ level: "medium", text: "质保缺失：项目质保期或部分设备质保未填写，售后责任边界不清晰。" });
+  }
+  if (project.items.some((item) => numberValue(item.qty) <= 0 || numberValue(item.qty) > 10000)) {
+    risks.push({ level: "high", text: "数量异常：存在数量为 0、负数或异常大的分项，请检查导入文件和单位。" });
+  }
   if (project.items.some((item) => !item.name || !item.model || !item.spec)) {
     risks.push({ level: "medium", text: "设备名称、型号或技术响应未填完整，可能影响技术评分。" });
   }
   if (project.items.some((item) => !item.supplier)) {
-    risks.push({ level: "low", text: "部分设备未填写供应商，后续比价和供货追踪会比较麻烦。" });
+    risks.push({ level: "medium", text: "供应商缺失：部分设备未填写供应商，后续比价、供货和售后追踪会受影响。" });
   }
   if (project.items.some((item) => numberValue(item.costUnit) <= 0 || numberValue(item.quoteUnit) <= 0)) {
     risks.push({ level: "medium", text: "部分设备成本或报价单价为 0，建议导入后复核单价。" });
@@ -877,7 +1013,11 @@ function cleanCell(value) {
 
 function downloadCsv(rows, fileName) {
   const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
-  const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
+  downloadText(`\ufeff${csv}`, fileName, "text/csv;charset=utf-8");
+}
+
+function downloadText(text, fileName, type) {
+  const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -944,6 +1084,7 @@ function normalizeProject(project) {
   return {
     ...project,
     id: project.id || uid(),
+    status: normalizeStatus(project.status),
     quoteNo: project.quoteNo || makeQuoteNo(),
     company: project.company || "",
     contact: project.contact || "",
@@ -961,6 +1102,17 @@ function normalizeProject(project) {
       ? project.items.map(normalizeItem)
       : [createItem()]
   };
+}
+
+function normalizeStatus(status) {
+  const legacyStatus = {
+    quoted: "approved",
+    submitted: "sent",
+    won: "archived",
+    lost: "archived"
+  };
+  const nextStatus = legacyStatus[status] || status || "draft";
+  return statusLabels[nextStatus] ? nextStatus : "draft";
 }
 
 function normalizeItem(item) {
@@ -1036,7 +1188,7 @@ function seedProjects() {
   projectA.agency = "华信招标代理";
   projectA.budget = 980000;
   projectA.deadline = nextDate(6);
-  projectA.status = "quoted";
+  projectA.status = "approved";
   projectA.bond = 20000;
   projectA.deliveryDays = 35;
   projectA.payment = "30%预付款，60%到货验收，10%质保金";
@@ -1088,7 +1240,7 @@ function seedProjects() {
   projectB.agency = "自采询价";
   projectB.budget = 620000;
   projectB.deadline = nextDate(2);
-  projectB.status = "draft";
+  projectB.status = "review";
   projectB.bond = 0;
   projectB.deliveryDays = 20;
   projectB.payment = "货到票到 60 天";
