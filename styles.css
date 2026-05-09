@@ -570,6 +570,130 @@ svg {
   font-size: 12px;
 }
 
+.quote-scenarios {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+  padding: 12px;
+}
+
+.scenario-head,
+.scenario-card-title,
+.scenario-meta {
+  display: flex;
+  align-items: center;
+}
+
+.scenario-head {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.scenario-head span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.scenario-head strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 16px;
+}
+
+.scenario-head small {
+  max-width: 150px;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+  line-height: 1.35;
+}
+
+.scenario-list {
+  display: grid;
+  gap: 8px;
+}
+
+.scenario-card {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 7px;
+  padding: 10px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.scenario-card:hover {
+  border-color: var(--line-strong);
+  background: #fcfdf9;
+}
+
+.scenario-card.high {
+  border-left-color: var(--red);
+}
+
+.scenario-card.warn {
+  border-left-color: var(--amber);
+}
+
+.scenario-card.good {
+  border-left-color: var(--teal);
+}
+
+.scenario-card.safe {
+  border-left-color: var(--green);
+}
+
+.scenario-card-title {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scenario-card-title strong {
+  font-size: 14px;
+}
+
+.scenario-card-title span {
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #f3f4f6;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.scenario-price {
+  margin-top: 6px;
+  font-size: 22px;
+  line-height: 1.1;
+  font-weight: 850;
+}
+
+.scenario-meta {
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+}
+
+.scenario-meta span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.scenario-card p {
+  margin: 7px 0 0;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .margin-band {
   margin: 12px 0;
   padding: 12px;

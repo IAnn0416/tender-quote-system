@@ -44,6 +44,7 @@ const els = {
   costForm: document.querySelector("#costForm"),
   checklist: document.querySelector("#checklist"),
   metrics: document.querySelector("#metrics"),
+  quoteScenarios: document.querySelector("#quoteScenarios"),
   marginBand: document.querySelector("#marginBand"),
   riskList: document.querySelector("#riskList"),
   savedState: document.querySelector("#savedState"),
@@ -120,6 +121,7 @@ els.checklist.addEventListener("change", handleChecklistInput);
 els.itemsTableBody.addEventListener("input", handleItemInput);
 els.itemsTableBody.addEventListener("click", handleItemClick);
 els.itemsFileInput.addEventListener("change", handleItemsFile);
+els.quoteScenarios.addEventListener("click", handleScenarioClick);
 
 render();
 persist();
@@ -303,8 +305,9 @@ function renderSummary() {
     ${metric("投标含税总价", money.format(calc.totalQuote), `不含税 ${money.format(calc.salesExTax)} · 税额 ${money.format(calc.taxAmount)}`)}
     ${metric("内部总成本", money.format(calc.totalCost), `设备成本 ${money.format(calc.itemCost)} · 费用 ${money.format(calc.extraCost)}`)}
     ${metric("预计毛利", money.format(calc.grossProfit), `毛利率 ${formatPercent(calc.margin)} · 目标 ${formatPercent(calc.targetMargin)}`)}
-    ${metric("最低建议含税价", money.format(calc.minTotalQuote), `按目标毛利倒推，不含税 ${money.format(calc.minSalesExTax)}`)}
+    ${metric("亏损警戒线", money.format(calc.breakEvenTotalQuote), `低于该含税价会亏损，不含税 ${money.format(calc.breakEvenSalesExTax)}`)}
   `;
+  renderQuoteScenarios(project, calc);
 
   const marginScore = clamp(calc.margin * 100, 0, 45);
   const fillClass = calc.margin < 0 ? "danger" : calc.margin < calc.targetMargin ? "warn" : "";
@@ -320,6 +323,36 @@ function renderSummary() {
   els.riskList.innerHTML = `<div class="risk-list">${risks
     .map((risk) => `<div class="risk-item ${risk.level}">${risk.text}</div>`)
     .join("")}</div>`;
+}
+
+function renderQuoteScenarios(project, calc) {
+  const scenarios = getQuoteScenarios(project, calc);
+  els.quoteScenarios.innerHTML = `
+    <div class="scenario-head">
+      <div>
+        <span>报价方案</span>
+        <strong>多档报价建议</strong>
+      </div>
+      <small>低于 ${money.format(calc.breakEvenTotalQuote)} 含税即亏损</small>
+    </div>
+    <div class="scenario-list">
+      ${scenarios.map((scenario) => `
+        <button class="scenario-card ${scenario.level}" type="button" data-scenario-price="${scenario.salesExTax}">
+          <div class="scenario-card-title">
+            <strong>${scenario.name}</strong>
+            <span>${scenario.badge}</span>
+          </div>
+          <div class="scenario-price">${money.format(scenario.totalQuote)}</div>
+          <div class="scenario-meta">
+            <span>不含税 ${money.format(scenario.salesExTax)}</span>
+            <span>毛利 ${money.format(scenario.grossProfit)}</span>
+            <span>毛利率 ${formatPercent(scenario.margin)}</span>
+          </div>
+          <p>${scenario.risk}</p>
+        </button>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderPrintSheet() {
@@ -472,6 +505,17 @@ function handleItemClick(event) {
   updateProject(project);
 }
 
+function handleScenarioClick(event) {
+  const card = event.target.closest("[data-scenario-price]");
+  if (!card) return;
+  const project = getCurrentProject();
+  if (!project) return;
+  const targetSalesExTax = numberValue(card.dataset.scenarioPrice);
+  applyScenarioPrice(project, targetSalesExTax);
+  updateProject(project);
+  setImportStatus("已按所选报价方案自动调整分项报价", "success");
+}
+
 function updateProject(project, lightRender = false) {
   state.projects = state.projects.map((entry) => entry.id === project.id ? project : entry);
   scheduleSave();
@@ -506,6 +550,8 @@ function calculate(project) {
   const totalQuote = salesExTax + taxAmount;
   const grossProfit = salesExTax - totalCost;
   const margin = salesExTax > 0 ? grossProfit / salesExTax : 0;
+  const breakEvenSalesExTax = totalCost;
+  const breakEvenTotalQuote = breakEvenSalesExTax * (1 + taxRate);
   const minSalesExTax = targetMargin >= 1 ? totalCost : totalCost / Math.max(0.01, 1 - targetMargin);
   const minTotalQuote = minSalesExTax * (1 + taxRate);
   return {
@@ -519,9 +565,62 @@ function calculate(project) {
     totalQuote,
     grossProfit,
     margin,
+    breakEvenSalesExTax,
+    breakEvenTotalQuote,
     minSalesExTax,
     minTotalQuote
   };
+}
+
+function getQuoteScenarios(project, calc) {
+  const taxRate = numberValue(project.taxRate);
+  const budget = numberValue(project.budget);
+  const targetMargin = clamp(numberValue(project.targetMargin), 0, 0.65);
+  const competitiveMargin = clamp(Math.min(targetMargin * 0.55, 0.08), 0.03, 0.1);
+  const steadyMargin = clamp(targetMargin + 0.05, targetMargin, 0.36);
+  const scenarios = [
+    makeScenario("保本线", "底线", 0, "high", "只覆盖内部总成本，低于这一档就是亏损；通常不建议作为正式报价，只用于守底线。", calc, taxRate, budget),
+    makeScenario("低价竞争", "抢单", competitiveMargin, "warn", "价格更有竞争力，但利润薄，安装、质保、回款延迟或漏项都会明显放大风险。", calc, taxRate, budget),
+    makeScenario("建议报价", "目标", targetMargin, "good", "按目标毛利率倒推，适合作为正常投标主报价，兼顾利润和中标可能性。", calc, taxRate, budget),
+    makeScenario("稳健报价", "利润", steadyMargin, "safe", "利润和售后缓冲更足，但如果招标方价格权重较高，中标风险会增加。", calc, taxRate, budget)
+  ];
+  return scenarios.map((scenario) => ({
+    ...scenario,
+    risk: scenario.budgetWarning ? `${scenario.risk} ${scenario.budgetWarning}` : scenario.risk
+  }));
+}
+
+function makeScenario(name, badge, margin, level, risk, calc, taxRate, budget) {
+  const salesExTax = calc.totalCost / Math.max(0.01, 1 - margin);
+  const taxAmount = salesExTax * taxRate;
+  const totalQuote = salesExTax + taxAmount;
+  const grossProfit = salesExTax - calc.totalCost;
+  const budgetWarning = budget > 0 && totalQuote > budget
+    ? `该档超过预算 ${money.format(totalQuote - budget)}。`
+    : "";
+  return {
+    name,
+    badge,
+    level,
+    risk,
+    margin,
+    salesExTax,
+    taxAmount,
+    totalQuote,
+    grossProfit,
+    budgetWarning
+  };
+}
+
+function applyScenarioPrice(project, targetSalesExTax) {
+  const currentSalesExTax = project.items.reduce((sum, item) => sum + numberValue(item.qty) * numberValue(item.quoteUnit), 0);
+  const fallbackCost = project.items.reduce((sum, item) => sum + numberValue(item.qty) * numberValue(item.costUnit), 0);
+  const baseTotal = currentSalesExTax > 0 ? currentSalesExTax : fallbackCost;
+  const ratio = baseTotal > 0 ? targetSalesExTax / baseTotal : 1;
+  project.items = project.items.map((item) => ({
+    ...item,
+    quoteUnit: roundMoney(numberValue(item.quoteUnit || item.costUnit) * ratio)
+  }));
 }
 
 function getRisks(project, calc) {
@@ -1057,6 +1156,10 @@ function numberValue(value) {
   if (!match) return 0;
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) ? (isPercent ? parsed / 100 : parsed) : 0;
+}
+
+function roundMoney(value) {
+  return Math.round(numberValue(value) * 100) / 100;
 }
 
 function formatPercent(value) {
