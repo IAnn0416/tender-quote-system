@@ -65,6 +65,22 @@ const rateItemFields = new Set(["taxRate"]);
 const moneyCostFields = new Set(["freight", "installation", "warranty", "service", "finance", "misc"]);
 const numericItemFields = new Set(["qty", "costUnit", "quoteUnit", "taxRate", "leadTime", "warranty"]);
 
+const importFieldDefs = [
+  { key: "name", label: "设备/服务名称", required: true },
+  { key: "model", label: "型号/规格" },
+  { key: "supplier", label: "供应商" },
+  { key: "qty", label: "数量" },
+  { key: "unit", label: "单位" },
+  { key: "costUnit", label: "成本单价" },
+  { key: "costTotal", label: "成本合计" },
+  { key: "quoteUnit", label: "报价单价" },
+  { key: "quoteTotal", label: "报价合计" },
+  { key: "taxRate", label: "税率" },
+  { key: "leadTime", label: "交期" },
+  { key: "warranty", label: "质保" },
+  { key: "spec", label: "参数/备注" }
+];
+
 let state = loadState();
 let currentId = state.currentId || state.projects[0]?.id;
 let currentStep = Number(state.currentStep || 1);
@@ -74,6 +90,7 @@ let saveTimer;
 let lastDeleteAction = null;
 let activeAdviceKey = "";
 let riskExpanded = false;
+let pendingImport = null;
 
 const els = {
   workspace: document.querySelector("#workspace"),
@@ -95,6 +112,17 @@ const els = {
   itemsTableBody: document.querySelector("#itemsTable tbody"),
   itemsFileInput: document.querySelector("#itemsFileInput"),
   importStatus: document.querySelector("#importStatus"),
+  importMapper: document.querySelector("#importMapper"),
+  importSheetSelect: document.querySelector("#importSheetSelect"),
+  importHeaderRow: document.querySelector("#importHeaderRow"),
+  importStartRow: document.querySelector("#importStartRow"),
+  importAutoPrice: document.querySelector("#importAutoPrice"),
+  importMapperStatus: document.querySelector("#importMapperStatus"),
+  importColumnMap: document.querySelector("#importColumnMap"),
+  importPreview: document.querySelector("#importPreview"),
+  importConfirmBtn: document.querySelector("#importConfirmBtn"),
+  importCancelBtn: document.querySelector("#importCancelBtn"),
+  importCloseBtn: document.querySelector("#importCloseBtn"),
   costForm: document.querySelector("#costForm"),
   checklist: document.querySelector("#checklist"),
   metrics: document.querySelector("#metrics"),
@@ -210,6 +238,14 @@ els.itemsTableBody.addEventListener("input", handleItemInput);
 els.itemsTableBody.addEventListener("focusout", handleFormatBlur);
 els.itemsTableBody.addEventListener("click", handleItemClick);
 els.itemsFileInput.addEventListener("change", handleItemsFile);
+els.importSheetSelect.addEventListener("change", handleImportSheetChange);
+els.importHeaderRow.addEventListener("change", handleImportLayoutChange);
+els.importStartRow.addEventListener("change", handleImportPreviewChange);
+els.importAutoPrice.addEventListener("change", handleImportPreviewChange);
+els.importColumnMap.addEventListener("change", handleImportPreviewChange);
+els.importConfirmBtn.addEventListener("click", confirmImportItems);
+els.importCancelBtn.addEventListener("click", closeImportMapper);
+els.importCloseBtn.addEventListener("click", handleImportPreviewChange);
 els.quoteScenarios.addEventListener("click", handleScenarioClick);
 els.riskList.addEventListener("click", handleRiskToggle);
 els.tenderFileInput.addEventListener("change", (event) => handleBidFile(event, "tenderFile"));
@@ -1370,21 +1406,14 @@ async function handleItemsFile(event) {
   try {
     const project = getCurrentProject();
     if (!project) return;
-    const rows = await readImportRows(file);
-    const items = rowsToItems(rows, project.taxRate);
-    if (!items.length) {
-      setImportStatus("未识别到有效设备行", "error");
+    const dataset = await readImportDataset(file);
+    if (!dataset.sheets.length) {
+      setImportStatus("未识别到可读取的表格内容", "error");
       return;
     }
-
-    const hasExistingItems = project.items.some((item) => item.name || item.model || numberValue(item.costUnit) || numberValue(item.quoteUnit));
-    if (hasExistingItems && !window.confirm(`导入会替换当前 ${project.items.length} 条分项报价，是否继续？`)) {
-      return;
-    }
-
-    project.items = items;
-    updateProject(project);
-    setImportStatus(`已导入 ${items.length} 条分项报价，并重新计算汇总`, "success");
+    pendingImport = createImportDraft(dataset, project);
+    renderImportMapper();
+    openImportMapper();
   } catch (error) {
     const message = error.message === "XLSX_NOT_AVAILABLE"
       ? "Excel 解析库未加载成功，请使用下载模板生成的 .xls 或另存为 CSV 后导入"
@@ -1643,22 +1672,41 @@ async function readBidFileMeta(file) {
   return meta;
 }
 
-async function readImportRows(file) {
+async function readImportDataset(file) {
   const extension = file.name.split(".").pop()?.toLowerCase() || "";
   if (["xlsx", "xls"].includes(extension) && window.XLSX) {
     try {
       const buffer = await file.arrayBuffer();
       const workbook = window.XLSX.read(buffer, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const rows = window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
-      return rows.map((row) => row.map(cleanCell)).filter((row) => row.some(Boolean));
+      const sheets = workbook.SheetNames
+        .map((sheetName) => ({
+          name: sheetName,
+          rows: normalizeImportRows(window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" }))
+        }))
+        .filter((sheet) => sheet.rows.length);
+      return { fileName: file.name, extension, sheets };
     } catch {
       if (extension === "xlsx") throw new Error("XLSX_NOT_AVAILABLE");
     }
   }
   if (extension === "xlsx") throw new Error("XLSX_NOT_AVAILABLE");
   const text = await file.text();
-  return parseImportRows(text);
+  return {
+    fileName: file.name,
+    extension,
+    sheets: [{ name: "导入文件", rows: normalizeImportRows(parseImportRows(text)) }]
+  };
+}
+
+async function readImportRows(file) {
+  const dataset = await readImportDataset(file);
+  return dataset.sheets[0]?.rows || [];
+}
+
+function normalizeImportRows(rows) {
+  return rows
+    .map((row) => Array.from(row || []).map(cleanCell))
+    .filter((row) => row.some(Boolean));
 }
 
 function parseImportRows(text) {
@@ -1724,6 +1772,417 @@ function detectDelimiter(text) {
     .sort((a, b) => b.count - a.count)[0].delimiter;
 }
 
+function createImportDraft(dataset, project) {
+  const sheets = dataset.sheets.map((sheet) => ({
+    ...sheet,
+    analysis: analyzeImportSheet(sheet.rows, project)
+  }));
+  const selectedSheetIndex = Math.max(0, sheets.findIndex((sheet) => sheet.analysis.score === Math.max(...sheets.map((entry) => entry.analysis.score))));
+  const selected = sheets[selectedSheetIndex] || sheets[0];
+  return {
+    fileName: dataset.fileName,
+    sheets,
+    selectedSheetIndex,
+    headerRow: selected.analysis.headerRow,
+    startRow: selected.analysis.startRow,
+    autoPrice: true,
+    priceMode: selected.analysis.priceMode,
+    columns: selected.analysis.columns,
+    mapping: { ...selected.analysis.mapping }
+  };
+}
+
+function analyzeImportSheet(rows, project, forcedHeaderRow) {
+  const priceMode = detectImportPriceMode(rows);
+  const maxHeaderIndex = Math.min(rows.length - 1, 35);
+  const candidates = [];
+  const headerIndexes = forcedHeaderRow ? [Math.max(0, forcedHeaderRow - 1)] : Array.from({ length: maxHeaderIndex + 1 }, (_, index) => index);
+
+  headerIndexes.forEach((headerIndex) => {
+    const columns = buildImportColumns(rows, headerIndex, priceMode);
+    const mapping = suggestImportMapping(columns, priceMode);
+    const score = scoreImportHeader(rows, headerIndex, columns, mapping, project);
+    candidates.push({ headerIndex, columns, mapping, score });
+  });
+
+  const best = candidates.sort((a, b) => b.score - a.score)[0] || {
+    headerIndex: 0,
+    columns: buildImportColumns(rows, 0, priceMode),
+    mapping: {},
+    score: 0
+  };
+
+  return {
+    priceMode,
+    headerRow: best.headerIndex + 1,
+    startRow: Math.min(rows.length, best.headerIndex + 2),
+    columns: best.columns,
+    mapping: best.mapping,
+    score: best.score
+  };
+}
+
+function detectImportPriceMode(rows) {
+  const text = normalizeSearchText(rows.slice(0, 160).flat().join(" "));
+  if (/报价单价|投标单价|销售单价|报价合计|投标合价|销售合价/.test(text)) return "quote";
+  if (/成本|底价|采购|进货|利润|税金|人工|管理|辅材|材料费/.test(text) && /报价/.test(text)) return "cost";
+  return "quote";
+}
+
+function buildImportColumns(rows, headerIndex, priceMode) {
+  const header = rows[headerIndex] || [];
+  const maxCols = Math.max(...rows.slice(0, Math.min(rows.length, headerIndex + 8)).map((row) => row.length), header.length, 0);
+  return Array.from({ length: maxCols }, (_, index) => {
+    const label = cleanCell(header[index]);
+    const above = findNearestHeaderCell(rows, headerIndex, index);
+    const displayLabel = label || above || `第 ${index + 1} 列`;
+    const sample = rows
+      .slice(headerIndex + 1, headerIndex + 8)
+      .map((row) => cleanCell(row[index]))
+      .find(Boolean) || "";
+    return {
+      index,
+      label: displayLabel,
+      rawLabel: label,
+      sample,
+      field: resolveImportField(displayLabel, priceMode)
+    };
+  }).filter((column) => column.rawLabel || column.sample);
+}
+
+function findNearestHeaderCell(rows, headerIndex, columnIndex) {
+  for (let rowIndex = headerIndex - 1; rowIndex >= Math.max(0, headerIndex - 2); rowIndex -= 1) {
+    const value = cleanCell(rows[rowIndex]?.[columnIndex]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function suggestImportMapping(columns, priceMode) {
+  const mapping = {};
+  columns.forEach((column) => {
+    const fieldName = column.field || resolveImportField(column.label, priceMode);
+    if (!fieldName) return;
+    if (fieldName === "spec" && mapping.spec !== undefined && /备注|说明|参数|响应/.test(normalizeHeader(column.label))) {
+      mapping.spec = column.index;
+      return;
+    }
+    if (mapping[fieldName] === undefined) mapping[fieldName] = column.index;
+  });
+  return mapping;
+}
+
+function scoreImportHeader(rows, headerIndex, columns, mapping, project) {
+  const weights = {
+    name: 10,
+    model: 5,
+    supplier: 3,
+    qty: 7,
+    unit: 2,
+    costUnit: 7,
+    costTotal: 7,
+    quoteUnit: 7,
+    quoteTotal: 7,
+    taxRate: 3,
+    leadTime: 2,
+    warranty: 2,
+    spec: 3
+  };
+  const fieldScore = Object.keys(mapping).reduce((sum, key) => sum + (weights[key] || 0), 0);
+  const hasName = mapping.name !== undefined || mapping.model !== undefined;
+  const hasPrice = ["costUnit", "costTotal", "quoteUnit", "quoteTotal"].some((key) => mapping[key] !== undefined);
+  const bodyRows = rows.slice(headerIndex + 1, headerIndex + 8);
+  const bodyScore = bodyRows.reduce((sum, row) => {
+    const qty = mapping.qty === undefined ? 0 : parseImportQuantity(row[mapping.qty]).qty;
+    const price = ["costUnit", "costTotal", "quoteUnit", "quoteTotal"]
+      .reduce((priceSum, key) => priceSum + (mapping[key] === undefined ? 0 : numberValue(row[mapping[key]])), 0);
+    return sum + (qty > 0 ? 1 : 0) + (price > 0 ? 1 : 0);
+  }, 0);
+  const projectBonus = project?.targetMargin ? 1 : 0;
+  return fieldScore + bodyScore + projectBonus + (hasName && hasPrice ? 8 : 0) + (columns.length >= 4 ? 2 : 0);
+}
+
+function openImportMapper() {
+  els.importMapper.classList.remove("hidden");
+}
+
+function closeImportMapper() {
+  pendingImport = null;
+  els.importMapper.classList.add("hidden");
+}
+
+function renderImportMapper() {
+  if (!pendingImport) return;
+  const sheet = getPendingImportSheet();
+  if (!sheet) return;
+
+  els.importSheetSelect.innerHTML = pendingImport.sheets
+    .map((entry, index) => `<option value="${index}" ${index === pendingImport.selectedSheetIndex ? "selected" : ""}>${escapeHtml(entry.name)}</option>`)
+    .join("");
+  els.importHeaderRow.value = pendingImport.headerRow;
+  els.importStartRow.value = pendingImport.startRow;
+  els.importAutoPrice.checked = pendingImport.autoPrice;
+  els.importColumnMap.innerHTML = importFieldDefs
+    .map((fieldDef) => renderImportFieldMapper(fieldDef, pendingImport.columns, pendingImport.mapping[fieldDef.key]))
+    .join("");
+  updateImportPreview();
+}
+
+function renderImportFieldMapper(fieldDef, columns, selectedIndex) {
+  const options = [
+    `<option value="">不导入</option>`,
+    ...columns.map((column) => {
+      const label = `${columnLetter(column.index)}列 ${column.label}${column.sample ? `（例：${column.sample.slice(0, 16)}）` : ""}`;
+      return `<option value="${column.index}" ${Number(selectedIndex) === column.index ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    })
+  ];
+  return `
+    <label class="import-map-row">
+      <strong>${escapeHtml(fieldDef.label)}${fieldDef.required ? " *" : ""}</strong>
+      <select data-import-field="${escapeAttr(fieldDef.key)}">
+        ${options.join("")}
+      </select>
+    </label>
+  `;
+}
+
+function handleImportSheetChange() {
+  if (!pendingImport) return;
+  pendingImport.selectedSheetIndex = Number(els.importSheetSelect.value) || 0;
+  const sheet = getPendingImportSheet();
+  const analysis = sheet.analysis || analyzeImportSheet(sheet.rows, getCurrentProject());
+  pendingImport.headerRow = analysis.headerRow;
+  pendingImport.startRow = analysis.startRow;
+  pendingImport.priceMode = analysis.priceMode;
+  pendingImport.columns = analysis.columns;
+  pendingImport.mapping = { ...analysis.mapping };
+  renderImportMapper();
+}
+
+function handleImportLayoutChange() {
+  if (!pendingImport) return;
+  const sheet = getPendingImportSheet();
+  const headerRow = clamp(Math.round(numberValue(els.importHeaderRow.value)) || 1, 1, Math.max(1, sheet.rows.length));
+  const analysis = analyzeImportSheet(sheet.rows, getCurrentProject(), headerRow);
+  pendingImport.headerRow = headerRow;
+  pendingImport.startRow = Math.max(headerRow + 1, Math.round(numberValue(els.importStartRow.value)) || analysis.startRow);
+  pendingImport.priceMode = analysis.priceMode;
+  pendingImport.columns = analysis.columns;
+  pendingImport.mapping = { ...analysis.mapping };
+  renderImportMapper();
+}
+
+function handleImportPreviewChange() {
+  if (!pendingImport) return;
+  readImportMapperForm();
+  updateImportPreview();
+}
+
+function readImportMapperForm() {
+  if (!pendingImport) return;
+  const sheet = getPendingImportSheet();
+  pendingImport.headerRow = clamp(Math.round(numberValue(els.importHeaderRow.value)) || pendingImport.headerRow, 1, Math.max(1, sheet.rows.length));
+  pendingImport.startRow = clamp(Math.round(numberValue(els.importStartRow.value)) || pendingImport.startRow, 1, Math.max(1, sheet.rows.length));
+  pendingImport.autoPrice = els.importAutoPrice.checked;
+  pendingImport.mapping = {};
+  els.importColumnMap.querySelectorAll("[data-import-field]").forEach((select) => {
+    if (select.value !== "") pendingImport.mapping[select.dataset.importField] = Number(select.value);
+  });
+}
+
+function updateImportPreview() {
+  if (!pendingImport) return;
+  const project = getCurrentProject();
+  const result = buildImportItems(pendingImport, project);
+  const modeText = pendingImport.priceMode === "cost"
+    ? "这张表更像成本清单，单价/总价已优先按成本处理。"
+    : "这张表更像报价清单，单价/总价已优先按报价处理。";
+  els.importMapperStatus.textContent = `${modeText} 预计可导入 ${result.items.length} 行，跳过 ${result.skippedCount} 行。`;
+  els.importMapperStatus.className = `import-status ${result.items.length ? "success" : "error"}`.trim();
+  els.importConfirmBtn.disabled = !result.items.length;
+  els.importPreview.innerHTML = renderImportPreview(result);
+}
+
+function renderImportPreview(result) {
+  if (!result.items.length) {
+    return `<div class="empty-state">还没有识别到可导入行。请确认“设备/服务名称”和价格列是否选对。</div>`;
+  }
+  const rows = result.items.slice(0, 8);
+  return `
+    <p class="import-preview-summary">以下是导入后的效果预览，只显示前 ${rows.length} 行。</p>
+    <div class="table-wrap">
+      <table class="import-preview-table">
+        <thead>
+          <tr>
+            <th>设备/服务</th>
+            <th>型号</th>
+            <th>数量</th>
+            <th>单位</th>
+            <th>成本单价</th>
+            <th>报价单价</th>
+            <th>参数/备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((item) => `
+            <tr>
+              <td>${escapeHtml(item.name)}</td>
+              <td>${escapeHtml(item.model)}</td>
+              <td>${formatPlainNumber(item.qty)}</td>
+              <td>${escapeHtml(item.unit)}</td>
+              <td>${formatMoneyInput(item.costUnit)}</td>
+              <td>${formatMoneyInput(item.quoteUnit)}</td>
+              <td>${escapeHtml(item.spec)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function confirmImportItems() {
+  if (!pendingImport) return;
+  readImportMapperForm();
+  const project = getCurrentProject();
+  if (!project) return;
+  const result = buildImportItems(pendingImport, project);
+  if (!result.items.length) {
+    updateImportPreview();
+    return;
+  }
+  const hasExistingItems = project.items.some((item) => item.name || item.model || numberValue(item.costUnit) || numberValue(item.quoteUnit));
+  if (hasExistingItems && !window.confirm(`导入会替换当前 ${project.items.length} 条分项报价，是否继续？`)) {
+    return;
+  }
+  project.items = result.items;
+  updateProject(project);
+  setImportStatus(`已导入 ${result.items.length} 条分项报价，跳过 ${result.skippedCount} 行，并重新计算汇总`, "success");
+  closeImportMapper();
+}
+
+function buildImportItems(draft, project) {
+  const sheet = getPendingImportSheet(draft);
+  if (!sheet) return { items: [], skippedCount: 0 };
+  const headerIndex = Math.max(0, (draft.headerRow || 1) - 1);
+  const startIndex = Math.max(headerIndex + 1, (draft.startRow || headerIndex + 2) - 1);
+  const context = {
+    headerName: cleanCell(sheet.rows[headerIndex]?.[(draft.mapping || {}).name]),
+    mapping: draft.mapping || {},
+    autoPrice: draft.autoPrice,
+    targetMargin: clamp(rateValue(project?.targetMargin ?? 0.18), 0, 0.8),
+    defaultTaxRate: project?.taxRate ?? 0
+  };
+  const items = [];
+  let skippedCount = 0;
+  sheet.rows.slice(startIndex).forEach((row) => {
+    const item = importRowToItem(row, context);
+    if (item) {
+      items.push(item);
+    } else {
+      skippedCount += row.some(Boolean) ? 1 : 0;
+    }
+  });
+  return { items, skippedCount };
+}
+
+function importRowToItem(row, context) {
+  const value = (fieldName) => {
+    const index = context.mapping[fieldName];
+    return index === undefined ? "" : cleanCell(row[index]);
+  };
+  const name = value("name");
+  const model = value("model");
+  const supplier = value("supplier");
+  const spec = value("spec");
+  const qtyInfo = parseImportQuantity(value("qty"));
+  const filledCount = row.filter(Boolean).length;
+  const firstText = cleanCell(name || row[0]);
+
+  if (isImportSummaryLabel(firstText)) return null;
+  if (firstText && context.headerName && normalizeHeader(firstText) === normalizeHeader(context.headerName) && filledCount <= 2) return null;
+
+  const qty = qtyInfo.qty || 1;
+  const unitForTotal = qtyInfo.isMeasurementLike ? 1 : qty;
+  const costTotal = numberValue(value("costTotal"));
+  const quoteTotal = numberValue(value("quoteTotal"));
+  let costUnit = numberValue(value("costUnit"));
+  let quoteUnit = numberValue(value("quoteUnit"));
+
+  if (!costUnit && costTotal) costUnit = costTotal / Math.max(1, unitForTotal);
+  if (!quoteUnit && quoteTotal) quoteUnit = quoteTotal / Math.max(1, unitForTotal);
+  if (costUnit && costTotal && !qtyInfo.isMeasurementLike) {
+    costUnit = preferTotalUnitPrice(costUnit, costTotal, unitForTotal);
+  }
+  if (quoteUnit && quoteTotal && !qtyInfo.isMeasurementLike) {
+    quoteUnit = preferTotalUnitPrice(quoteUnit, quoteTotal, unitForTotal);
+  }
+  if (!quoteUnit && costUnit && context.autoPrice) {
+    quoteUnit = costUnit / Math.max(0.01, 1 - context.targetMargin);
+  }
+
+  const hasUsableText = name || model || supplier || spec;
+  const hasPrice = costUnit || quoteUnit || costTotal || quoteTotal;
+  if (!hasUsableText && !hasPrice) return null;
+  if (!name && !model && !hasPrice) return null;
+
+  return normalizeItem({
+    id: uid(),
+    name: name || model || "未命名项目",
+    model: name ? model : "",
+    supplier,
+    qty,
+    unit: value("unit") || qtyInfo.unit || "项",
+    costUnit,
+    quoteUnit,
+    taxRate: value("taxRate") ? rateValue(value("taxRate")) : rateValue(context.defaultTaxRate),
+    leadTime: numberValue(value("leadTime")),
+    warranty: numberValue(value("warranty")),
+    spec
+  });
+}
+
+function preferTotalUnitPrice(unitPrice, totalPrice, qty) {
+  const impliedUnit = totalPrice / Math.max(1, qty);
+  const diffRate = Math.abs(impliedUnit - unitPrice) / Math.max(1, Math.abs(unitPrice));
+  return diffRate > 0.02 ? impliedUnit : unitPrice;
+}
+
+function parseImportQuantity(value) {
+  const text = cleanCell(value);
+  if (!text) return { qty: 1, unit: "", isMeasurementLike: false };
+  const isMeasurementLike = /(?:\d)\s*[×xX*]\s*(?:\d)/.test(text);
+  if (isMeasurementLike) return { qty: 1, unit: "项", isMeasurementLike: true };
+  const match = text.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return { qty: 1, unit: text, isMeasurementLike: false };
+  const qty = numberValue(match[0]) || 1;
+  const unit = text
+    .replace(match[0], "")
+    .replace(/[，,。\s]/g, "")
+    .trim();
+  return { qty, unit, isMeasurementLike: false };
+}
+
+function isImportSummaryLabel(value) {
+  const text = normalizeHeader(value);
+  return /^(合计|小计|总计|税金|利润|报价|总报价|最终报价|不含税合计|含税合计|汇总)$/.test(text);
+}
+
+function getPendingImportSheet(draft = pendingImport) {
+  return draft?.sheets?.[draft.selectedSheetIndex];
+}
+
+function columnLetter(index) {
+  let number = Number(index) + 1;
+  let text = "";
+  while (number > 0) {
+    const remainder = (number - 1) % 26;
+    text = String.fromCharCode(65 + remainder) + text;
+    number = Math.floor((number - 1) / 26);
+  }
+  return text;
+}
+
 function rowsToItems(rows, defaultTaxRate = 0) {
   if (!rows.length) return [];
   const headerIndex = rows.findIndex((row) => row.some((cell) => resolveItemField(cell)));
@@ -1777,6 +2236,36 @@ function rowToItem(row, mapping, defaultTaxRate = 0) {
     warranty: numberValue(value("warranty")),
     spec: value("spec")
   });
+}
+
+function resolveImportField(header, priceMode = "quote") {
+  const text = normalizeHeader(header);
+  if (!text || ["序号", "编号", "no"].includes(text)) return "";
+  if (["材料", "设备服务", "设备服务名称", "设备名称", "服务名称", "产品名称", "物料名称", "货物名称", "项目名称", "名称", "品名", "设备", "服务", "项目"].includes(text)) return "name";
+  if (text.includes("规格型号") || text.includes("型号规格") || text.includes("规格及型号") || text === "型号" || text === "规格") return "model";
+  if (["供应商", "供货商", "厂家", "厂家名称", "生产厂家", "品牌", "制造商"].includes(text)) return "supplier";
+  if (["数量", "qty", "数目", "工程量"].includes(text)) return "qty";
+  if (["单位", "unit", "计量单位"].includes(text)) return "unit";
+  if (text.includes("税率")) return "taxRate";
+  if (text.includes("交期") || text.includes("交货期") || text.includes("供货期") || text.includes("交付周期")) return "leadTime";
+  if (text.includes("质保") || text.includes("保修")) return "warranty";
+
+  const isUnitPrice = text.includes("单价");
+  const isTotalPrice = text.includes("总价") || text.includes("合价") || text.includes("合计") || text.includes("金额") || text.includes("小计");
+  const isCostText = text.includes("成本") || text.includes("采购") || text.includes("进货") || text.includes("底价") || text.includes("材料费") || text.includes("人工费");
+  const isQuoteText = text.includes("报价") || text.includes("投标") || text.includes("销售");
+
+  if (isCostText && isTotalPrice) return "costTotal";
+  if (isCostText && isUnitPrice) return "costUnit";
+  if (isCostText) return "costTotal";
+  if (isQuoteText && isTotalPrice) return "quoteTotal";
+  if (isQuoteText && isUnitPrice) return "quoteUnit";
+  if (isQuoteText) return "quoteUnit";
+  if (isTotalPrice) return priceMode === "cost" ? "costTotal" : "quoteTotal";
+  if (isUnitPrice) return priceMode === "cost" ? "costUnit" : "quoteUnit";
+
+  if (text.includes("参数") || text.includes("响应") || text.includes("备注") || text.includes("说明") || text.includes("技术要求") || text.includes("材质")) return "spec";
+  return "";
 }
 
 function resolveItemField(header) {

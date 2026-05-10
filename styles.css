@@ -555,6 +555,7 @@ svg {
 }
 
 .field label,
+.field > span,
 .check-item span {
   color: #344054;
   font-size: 14px;
@@ -676,6 +677,127 @@ svg {
 
 .import-status:empty {
   display: none;
+}
+
+.import-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(31, 41, 51, 0.42);
+}
+
+.import-modal.hidden {
+  display: none;
+}
+
+.import-modal-panel {
+  width: min(1120px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 26px 70px rgba(32, 40, 44, 0.18);
+  padding: 18px;
+}
+
+.import-config {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.2fr) minmax(140px, 0.7fr) minmax(170px, 0.8fr) minmax(260px, 1.3fr);
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.import-auto-price {
+  align-self: end;
+  min-height: 42px;
+}
+
+.import-map-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.import-map-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+}
+
+.import-map-row strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.import-map-row select,
+.import-config input,
+.import-config select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  padding: 8px 10px;
+  font-size: 15px;
+  outline: none;
+}
+
+.import-map-row select:focus,
+.import-config input:focus,
+.import-config select:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.13);
+}
+
+.import-preview-block {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.import-preview-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.import-preview-table th,
+.import-preview-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.import-preview-table th {
+  background: #f8faf7;
+  color: #475467;
+  font-weight: 820;
+}
+
+.import-preview-summary {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.import-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .row-delete {
@@ -1358,6 +1480,11 @@ svg {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .import-config,
+  .import-map-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .summary-panel {
     grid-column: 1 / -1;
   }
@@ -1409,6 +1536,8 @@ svg {
   .analysis-grid,
   .export-summary,
   .export-grid,
+  .import-config,
+  .import-map-grid,
   .bid-upload-grid,
   .bid-file-list {
     grid-template-columns: 1fr;

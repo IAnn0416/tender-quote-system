@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>招标报价系统</title>
-    <link rel="stylesheet" href="./styles.css?v=20260510-step-polish" />
+    <link rel="stylesheet" href="./styles.css?v=20260510-import-mapper" />
   </head>
   <body>
     <svg aria-hidden="true" class="icon-sprite">
@@ -425,9 +425,59 @@
       </div>
     </div>
 
+    <section class="import-modal hidden" id="importMapper" role="dialog" aria-modal="true" aria-labelledby="importMapperTitle">
+      <div class="import-modal-panel">
+        <div class="panel-title">
+          <div>
+            <span class="section-kicker">导入确认</span>
+            <h2 id="importMapperTitle">确认表格列</h2>
+            <p class="section-help">系统会先自动识别，识别不准时在这里改对应列。</p>
+          </div>
+          <button class="button ghost" id="importCancelBtn" type="button">取消</button>
+        </div>
+
+        <div class="import-config">
+          <label class="field">
+            <span>工作表</span>
+            <select id="importSheetSelect"></select>
+          </label>
+          <label class="field">
+            <span>表头行</span>
+            <input id="importHeaderRow" type="number" min="1" step="1" />
+          </label>
+          <label class="field">
+            <span>数据从第几行开始</span>
+            <input id="importStartRow" type="number" min="1" step="1" />
+          </label>
+          <label class="check-item import-auto-price">
+            <input id="importAutoPrice" type="checkbox" checked />
+            <span>只有成本价时，按目标毛利率自动生成报价单价</span>
+          </label>
+        </div>
+
+        <div class="import-status" id="importMapperStatus" aria-live="polite"></div>
+        <div class="import-map-grid" id="importColumnMap"></div>
+
+        <div class="import-preview-block">
+          <div class="panel-title compact">
+            <div>
+              <span class="section-kicker">导入预览</span>
+              <h2>前几行结果</h2>
+            </div>
+          </div>
+          <div id="importPreview"></div>
+        </div>
+
+        <div class="import-modal-actions">
+          <button class="button ghost" id="importCloseBtn" type="button">刷新预览</button>
+          <button class="button primary" id="importConfirmBtn" type="button">确认导入</button>
+        </div>
+      </div>
+    </section>
+
     <section id="printSheet" aria-label="打印报价单"></section>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./app.js?v=20260510-step-polish"></script>
+    <script src="./app.js?v=20260510-import-mapper"></script>
   </body>
 </html>
