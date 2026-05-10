@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>招标报价系统</title>
-    <link rel="stylesheet" href="./styles.css?v=20260510-simple" />
+    <link rel="stylesheet" href="./styles.css?v=20260510-ops" />
   </head>
   <body>
     <svg aria-hidden="true" class="icon-sprite">
@@ -37,6 +37,10 @@
         <path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
         <path d="M12 9v4M12 17h.01" />
       </symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24">
+        <path d="M3 7v6h6" />
+        <path d="M21 17a9 9 0 0 0-15-6.7L3 13" />
+      </symbol>
       <symbol id="i-check" viewBox="0 0 24 24">
         <path d="M20 6 9 17l-5-5" />
       </symbol>
@@ -53,6 +57,10 @@
           <button class="button ghost" id="saveBtn" type="button">
             <svg><use href="#i-save"></use></svg>
             保存
+          </button>
+          <button class="button ghost" id="undoBtn" type="button" disabled>
+            <svg><use href="#i-undo"></use></svg>
+            撤销删除
           </button>
           <button class="button ghost" id="exportBtn" type="button">
             <svg><use href="#i-download"></use></svg>
@@ -73,7 +81,7 @@
         <aside class="project-rail" aria-label="项目列表">
           <div class="rail-head">
             <div>
-              <span class="section-kicker">项目</span>
+              <span class="section-kicker">历史报价记录</span>
               <strong id="projectCount">0 个</strong>
               <small>先选项目，再填报价。</small>
             </div>
@@ -90,13 +98,22 @@
             <div class="panel-title">
               <div>
                 <span class="section-kicker">招标信息</span>
-                <h2 id="projectTitle">项目</h2>
+                <div class="title-row">
+                  <h2 id="projectTitle">项目</h2>
+                  <span class="pill draft" id="projectStatusBadge">草稿</span>
+                </div>
                 <p class="section-help">这里填客户、开标时间、付款方式等基本信息。</p>
               </div>
-              <button class="button ghost" id="duplicateBtn" type="button">
-                <svg><use href="#i-copy"></use></svg>
-                复制项目
-              </button>
+              <div class="panel-actions">
+                <button class="button ghost" id="duplicateBtn" type="button">
+                  <svg><use href="#i-copy"></use></svg>
+                  复制项目
+                </button>
+                <button class="button danger" id="deleteProjectBtn" type="button">
+                  <svg><use href="#i-trash"></use></svg>
+                  删除当前记录
+                </button>
+              </div>
             </div>
             <form class="form-grid" id="projectForm"></form>
           </section>
@@ -106,10 +123,10 @@
               <div>
                 <span class="section-kicker">设备清单</span>
                 <h2 id="itemsTitle">分项报价</h2>
-                <p class="section-help">推荐先下载模板，用 Excel 填好后再导入。</p>
+                <p class="section-help">推荐先下载 Excel 模板填好后导入，也支持 CSV。</p>
               </div>
               <div class="panel-actions">
-                <input id="itemsFileInput" class="file-input" type="file" accept=".csv,.tsv,.txt" />
+                <input id="itemsFileInput" class="file-input" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" />
                 <button class="button ghost" id="importItemsBtn" type="button">
                   <svg><use href="#i-upload"></use></svg>
                   从表格导入
@@ -121,6 +138,10 @@
                 <button class="button secondary" id="addItemBtn" type="button">
                   <svg><use href="#i-plus"></use></svg>
                   手动加一行
+                </button>
+                <button class="button danger" id="clearQuoteBtn" type="button">
+                  <svg><use href="#i-trash"></use></svg>
+                  清空报价
                 </button>
               </div>
             </div>
@@ -135,7 +156,8 @@
                     <th>数量</th>
                     <th>单位</th>
                     <th>成本单价</th>
-                    <th>不含税报价</th>
+                    <th>报价单价</th>
+                    <th>税率</th>
                     <th>行毛利</th>
                     <th>交期</th>
                     <th>质保</th>
@@ -181,7 +203,7 @@
                 <h2>报价汇总</h2>
                 <p class="section-help">右侧会自动算价格、利润和风险。</p>
               </div>
-              <span class="saved-state" id="savedState">已同步</span>
+              <span class="saved-state" id="savedState">保存到 localStorage</span>
             </div>
             <div class="metric-stack" id="metrics"></div>
             <div class="quote-scenarios" id="quoteScenarios"></div>
@@ -200,6 +222,7 @@
 
     <section id="printSheet" aria-label="打印报价单"></section>
 
-    <script src="./app.js?v=20260510-simple"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="./app.js?v=20260510-ops"></script>
   </body>
 </html>

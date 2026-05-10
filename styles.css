@@ -41,6 +41,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .icon-sprite {
   display: none;
 }
@@ -187,6 +192,16 @@ svg {
   background: #ffedd5;
 }
 
+.button.danger {
+  background: #fff;
+  color: var(--red);
+  border-color: #fecaca;
+}
+
+.button.danger:hover {
+  background: #fff1f2;
+}
+
 .button.ghost {
   background: var(--surface);
   color: var(--ink);
@@ -303,6 +318,13 @@ svg {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 9px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .project-card h3 {
@@ -464,7 +486,7 @@ svg {
 
 .quote-table {
   width: 100%;
-  min-width: 1320px;
+  min-width: 1420px;
   border-collapse: collapse;
 }
 
@@ -590,6 +612,18 @@ svg {
   color: var(--muted);
   font-size: 12px;
   font-weight: 760;
+}
+
+.saved-state.success {
+  color: var(--green);
+}
+
+.saved-state.pending {
+  color: var(--amber);
+}
+
+.saved-state.error {
+  color: var(--red);
 }
 
 .metric-stack {
