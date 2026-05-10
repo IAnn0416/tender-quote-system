@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>招标报价系统</title>
-    <link rel="stylesheet" href="./styles.css?v=20260510-advice-layout" />
+    <link rel="stylesheet" href="./styles.css?v=20260510-steps" />
   </head>
   <body>
     <svg aria-hidden="true" class="icon-sprite">
@@ -54,6 +54,7 @@
           <p class="topbar-note">按顺序操作：建项目、导入清单、检查风险、导出报价单。</p>
         </div>
         <div class="topbar-actions">
+          <span class="saved-state" id="savedState">保存到 localStorage</span>
           <button class="button ghost" id="saveBtn" type="button">
             <svg><use href="#i-save"></use></svg>
             保存
@@ -62,22 +63,32 @@
             <svg><use href="#i-undo"></use></svg>
             撤销删除
           </button>
-          <button class="button ghost" id="exportBtn" type="button">
-            <svg><use href="#i-download"></use></svg>
-            导出明细表
-          </button>
-          <button class="button ghost" id="customerQuoteBtn" type="button">
-            <svg><use href="#i-download"></use></svg>
-            给客户看的报价单
-          </button>
-          <button class="button primary" id="internalQuoteBtn" type="button">
-            <svg><use href="#i-download"></use></svg>
-            公司内部审核单
+          <button class="button primary" id="topNextBtn" type="button">
+            下一步
           </button>
         </div>
       </header>
 
-      <div class="workspace">
+      <nav class="step-nav" id="stepNav" aria-label="报价流程">
+        <button class="step-tab active" type="button" data-step="1">
+          <span>步骤 1</span>
+          <strong>填写报价信息</strong>
+        </button>
+        <button class="step-tab" type="button" data-step="2">
+          <span>步骤 2</span>
+          <strong>报价建议与风险检查</strong>
+        </button>
+        <button class="step-tab" type="button" data-step="3">
+          <span>步骤 3</span>
+          <strong>导出文件</strong>
+        </button>
+        <button class="step-tab" type="button" data-step="4">
+          <span>步骤 4</span>
+          <strong>标书检查助手</strong>
+        </button>
+      </nav>
+
+      <div class="workspace" id="workspace">
         <aside class="project-rail" aria-label="项目列表">
           <div class="rail-head">
             <div>
@@ -94,106 +105,299 @@
         </aside>
 
         <main class="main-panel">
-          <section class="panel project-editor" aria-labelledby="projectTitle">
-            <div class="panel-title">
-              <div>
-                <span class="section-kicker">招标信息</span>
-                <div class="title-row">
-                  <h2 id="projectTitle">项目</h2>
-                  <span class="pill draft" id="projectStatusBadge">草稿</span>
+          <section class="step-page active" id="stepFill" data-step-page="1">
+            <section class="panel project-editor" aria-labelledby="projectTitle">
+              <div class="panel-title">
+                <div>
+                  <span class="section-kicker">招标信息</span>
+                  <div class="title-row">
+                    <h2 id="projectTitle">项目</h2>
+                    <span class="pill draft" id="projectStatusBadge">草稿</span>
+                  </div>
+                  <p class="section-help">这里填客户、开标时间、付款方式等基本信息。</p>
                 </div>
-                <p class="section-help">这里填客户、开标时间、付款方式等基本信息。</p>
+                <div class="panel-actions">
+                  <button class="button ghost" id="duplicateBtn" type="button">
+                    <svg><use href="#i-copy"></use></svg>
+                    复制项目
+                  </button>
+                  <button class="button danger" id="deleteProjectBtn" type="button">
+                    <svg><use href="#i-trash"></use></svg>
+                    删除当前记录
+                  </button>
+                </div>
               </div>
-              <div class="panel-actions">
-                <button class="button ghost" id="duplicateBtn" type="button">
-                  <svg><use href="#i-copy"></use></svg>
-                  复制项目
-                </button>
-                <button class="button danger" id="deleteProjectBtn" type="button">
-                  <svg><use href="#i-trash"></use></svg>
-                  删除当前记录
-                </button>
-              </div>
-            </div>
-            <form class="form-grid" id="projectForm"></form>
-          </section>
+              <form class="form-grid" id="projectForm"></form>
+            </section>
 
-          <section class="quote-scenarios advice-workspace" id="quoteScenarios" aria-label="报价建议"></section>
-
-          <section class="panel quote-table-panel" aria-labelledby="itemsTitle">
-            <div class="panel-title compact">
-              <div>
-                <span class="section-kicker">设备清单</span>
-                <h2 id="itemsTitle">分项报价</h2>
-                <p class="section-help">推荐先下载 Excel 模板填好后导入，也支持 CSV。</p>
-              </div>
-              <div class="panel-actions">
-                <input id="itemsFileInput" class="file-input" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" />
-                <button class="button ghost" id="importItemsBtn" type="button">
-                  <svg><use href="#i-upload"></use></svg>
-                  从表格导入
-                </button>
-                <button class="button ghost" id="templateBtn" type="button">
-                  <svg><use href="#i-download"></use></svg>
-                  下载Excel模板
-                </button>
-                <button class="button secondary" id="addItemBtn" type="button">
-                  <svg><use href="#i-plus"></use></svg>
-                  手动加一行
-                </button>
-                <button class="button danger" id="clearQuoteBtn" type="button">
-                  <svg><use href="#i-trash"></use></svg>
-                  清空报价
-                </button>
-              </div>
-            </div>
-            <div class="import-status" id="importStatus" aria-live="polite"></div>
-            <div class="table-wrap">
-              <table class="quote-table" id="itemsTable">
-                <thead>
-                  <tr>
-                    <th>设备/服务</th>
-                    <th>型号</th>
-                    <th>供应商</th>
-                    <th>数量</th>
-                    <th>单位</th>
-                    <th>成本单价</th>
-                    <th>报价单价</th>
-                    <th>税率</th>
-                    <th>行毛利</th>
-                    <th>交期</th>
-                    <th>质保</th>
-                    <th>参数/响应</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="cost-check-grid">
-            <div class="panel">
+            <section class="panel quote-table-panel" aria-labelledby="itemsTitle">
               <div class="panel-title compact">
                 <div>
-                  <span class="section-kicker">内部成本</span>
-                  <h2>招标费用</h2>
-                  <p class="section-help">填运费、安装、质保等额外成本。</p>
+                  <span class="section-kicker">设备清单</span>
+                  <h2 id="itemsTitle">分项报价</h2>
+                  <p class="section-help">推荐先下载 Excel 模板填好后导入，也支持 CSV。</p>
+                </div>
+                <div class="panel-actions">
+                  <input id="itemsFileInput" class="file-input" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" />
+                  <button class="button ghost" id="importItemsBtn" type="button">
+                    <svg><use href="#i-upload"></use></svg>
+                    从表格导入
+                  </button>
+                  <button class="button ghost" id="templateBtn" type="button">
+                    <svg><use href="#i-download"></use></svg>
+                    下载Excel模板
+                  </button>
+                  <button class="button secondary" id="addItemBtn" type="button">
+                    <svg><use href="#i-plus"></use></svg>
+                    手动加一行
+                  </button>
+                  <button class="button danger" id="clearQuoteBtn" type="button">
+                    <svg><use href="#i-trash"></use></svg>
+                    清空报价
+                  </button>
                 </div>
               </div>
-              <form class="cost-grid" id="costForm"></form>
-            </div>
+              <div class="import-status" id="importStatus" aria-live="polite"></div>
+              <div class="table-wrap">
+                <table class="quote-table" id="itemsTable">
+                  <thead>
+                    <tr>
+                      <th>设备/服务</th>
+                      <th>型号</th>
+                      <th>供应商</th>
+                      <th>数量</th>
+                      <th>单位</th>
+                      <th>成本单价</th>
+                      <th>报价单价</th>
+                      <th>税率</th>
+                      <th>行毛利</th>
+                      <th>交期</th>
+                      <th>质保</th>
+                      <th>参数/响应</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </section>
 
-            <div class="panel">
+            <section class="cost-check-grid">
+              <div class="panel">
+                <div class="panel-title compact">
+                  <div>
+                    <span class="section-kicker">内部成本</span>
+                    <h2>招标费用</h2>
+                    <p class="section-help">填运费、安装、质保等额外成本。</p>
+                  </div>
+                </div>
+                <form class="cost-grid" id="costForm"></form>
+              </div>
+
+              <div class="panel">
+                <div class="panel-title compact">
+                  <div>
+                    <span class="section-kicker">商务条款与投标资料</span>
+                    <h2>合规清单</h2>
+                    <p class="section-help">准备好了就打勾，系统会在下一步集中提醒缺项。</p>
+                  </div>
+                </div>
+                <div class="checklist" id="checklist"></div>
+              </div>
+            </section>
+          </section>
+
+          <section class="step-page" id="stepReview" data-step-page="2">
+            <section class="panel review-hero">
               <div class="panel-title compact">
                 <div>
-                  <span class="section-kicker">投标资料</span>
-                  <h2>合规清单</h2>
-                  <p class="section-help">准备好了就打勾，系统会提醒缺项。</p>
+                  <span class="section-kicker">集中检查</span>
+                  <h2>报价建议与风险检查</h2>
+                  <p class="section-help">这里集中看价格底线、利润、缺失信息和高风险项。</p>
                 </div>
               </div>
-              <div class="checklist" id="checklist"></div>
+              <div class="decision-area" id="analysisDecision"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title compact">
+                <div>
+                  <span class="section-kicker">核心测算</span>
+                  <h2>报价检查结果</h2>
+                </div>
+              </div>
+              <div class="analysis-metrics" id="analysisMetrics"></div>
+            </section>
+
+            <section class="quote-scenarios advice-workspace" id="quoteScenarios" aria-label="报价建议"></section>
+
+            <section class="analysis-grid">
+              <div class="panel">
+                <div class="panel-title compact">
+                  <div>
+                    <span class="section-kicker">底线检查</span>
+                    <h2>亏损设备/服务行</h2>
+                  </div>
+                </div>
+                <div id="lossRows"></div>
+              </div>
+              <div class="panel">
+                <div class="panel-title compact">
+                  <div>
+                    <span class="section-kicker">利润检查</span>
+                    <h2>毛利率偏低行</h2>
+                  </div>
+                </div>
+                <div id="lowMarginRows"></div>
+              </div>
+              <div class="panel">
+                <div class="panel-title compact">
+                  <div>
+                    <span class="section-kicker">缺项提醒</span>
+                    <h2>缺失信息</h2>
+                  </div>
+                </div>
+                <div id="missingInfoList"></div>
+              </div>
+              <div class="panel">
+                <div class="panel-title compact">
+                  <div>
+                    <span class="section-kicker">重点处理</span>
+                    <h2>高风险提醒</h2>
+                  </div>
+                </div>
+                <div id="highRiskList"></div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title compact">
+                <div>
+                  <span class="section-kicker">完整风险</span>
+                  <h2>风险提醒</h2>
+                </div>
+              </div>
+              <div id="riskList"></div>
+            </section>
+
+            <div class="step-actions">
+              <button class="button ghost" id="backToEditBtn" type="button">返回修改</button>
+              <button class="button secondary" id="saveHistoryBtn" type="button">保存为历史报价</button>
+              <button class="button primary" id="continueExportBtn" type="button">继续导出</button>
             </div>
+          </section>
+
+          <section class="step-page" id="stepExport" data-step-page="3">
+            <section class="panel export-panel">
+              <div class="panel-title">
+                <div>
+                  <span class="section-kicker">文件输出</span>
+                  <h2>导出文件</h2>
+                  <p class="section-help">客户版不会显示内部成本、毛利率、最低报价和内部备注。</p>
+                </div>
+                <button class="button ghost" id="backToReviewBtn" type="button">返回检查</button>
+              </div>
+              <div class="export-summary" id="exportSummary"></div>
+              <div class="export-grid">
+                <div class="export-card">
+                  <strong>客户报价单</strong>
+                  <p>对外发送版本，只包含客户需要看到的报价、税额、条款和设备明细。</p>
+                  <div class="export-actions">
+                    <button class="button primary" id="customerQuoteBtn" type="button">
+                      <svg><use href="#i-download"></use></svg>
+                      导出客户报价单
+                    </button>
+                    <button class="button ghost" id="printCustomerBtn" type="button">
+                      <svg><use href="#i-printer"></use></svg>
+                      打印客户版
+                    </button>
+                  </div>
+                </div>
+                <div class="export-card internal">
+                  <strong>内部审核单</strong>
+                  <p>公司内部使用，显示完整成本、利润、供应商、风险和内部备注。</p>
+                  <div class="export-actions">
+                    <button class="button primary" id="internalQuoteBtn" type="button">
+                      <svg><use href="#i-download"></use></svg>
+                      导出内部审核单
+                    </button>
+                    <button class="button ghost" id="printInternalBtn" type="button">
+                      <svg><use href="#i-printer"></use></svg>
+                      打印内部版
+                    </button>
+                  </div>
+                </div>
+                <div class="export-card">
+                  <strong>明细表 Excel</strong>
+                  <p>导出设备/服务明细、费用、状态和测算数据，方便内部留档。</p>
+                  <button class="button ghost" id="exportBtn" type="button">
+                    <svg><use href="#i-download"></use></svg>
+                    导出明细表
+                  </button>
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <section class="step-page" id="stepBidCheck" data-step-page="4">
+            <section class="panel">
+              <div class="panel-title">
+                <div>
+                  <span class="section-kicker">后续检查</span>
+                  <h2>标书检查助手</h2>
+                  <p class="section-help">用于投标前核对招标方文件、我方文件、检查结果和必须完成项。</p>
+                </div>
+              </div>
+              <div class="bid-upload-grid">
+                <div class="bid-upload-card">
+                  <strong>招标方文件</strong>
+                  <input id="tenderFileInput" class="file-input" type="file" />
+                  <button class="button ghost" id="tenderFileBtn" type="button">
+                    <svg><use href="#i-upload"></use></svg>
+                    导入招标方文件
+                  </button>
+                </div>
+                <div class="bid-upload-card">
+                  <strong>我方文件</strong>
+                  <input id="ownFileInput" class="file-input" type="file" />
+                  <button class="button ghost" id="ownFileBtn" type="button">
+                    <svg><use href="#i-upload"></use></svg>
+                    导入我方文件
+                  </button>
+                </div>
+              </div>
+              <div class="import-status" id="bidFileStatus"></div>
+            </section>
+
+            <section class="analysis-grid">
+              <div class="panel">
+                <div class="panel-title compact">
+                  <div>
+                    <span class="section-kicker">自动结果</span>
+                    <h2>检查结果表</h2>
+                  </div>
+                </div>
+                <div id="bidResults"></div>
+              </div>
+              <div class="panel">
+                <div class="panel-title compact">
+                  <div>
+                    <span class="section-kicker">最终确认</span>
+                    <h2>投标检查清单</h2>
+                  </div>
+                </div>
+                <div class="checklist" id="bidChecklist"></div>
+              </div>
+              <div class="panel must-panel">
+                <div class="panel-title compact">
+                  <div>
+                    <span class="section-kicker">必须完成</span>
+                    <h2>必须完成项提醒</h2>
+                  </div>
+                </div>
+                <div id="bidMustList"></div>
+              </div>
+            </section>
           </section>
         </main>
 
@@ -203,19 +407,12 @@
               <div>
                 <span class="section-kicker">测算结果</span>
                 <h2>报价汇总</h2>
-                <p class="section-help">右侧会自动算价格、利润和风险。</p>
+                <p class="section-help">第一页只显示简单实时汇总。</p>
               </div>
-              <span class="saved-state" id="savedState">保存到 localStorage</span>
             </div>
             <div class="metric-stack" id="metrics"></div>
             <div class="margin-band" id="marginBand"></div>
-            <div class="risk-box">
-              <div class="risk-title">
-                <svg><use href="#i-alert"></use></svg>
-                <strong>风险提醒</strong>
-              </div>
-              <div id="riskList"></div>
-            </div>
+            <button class="button primary full-width" id="nextToAdviceBtn" type="button">下一步：查看建议和风险</button>
           </section>
         </aside>
       </div>
@@ -224,6 +421,6 @@
     <section id="printSheet" aria-label="打印报价单"></section>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./app.js?v=20260510-advice-layout"></script>
+    <script src="./app.js?v=20260510-steps"></script>
   </body>
 </html>

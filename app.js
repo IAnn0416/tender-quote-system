@@ -21,6 +21,15 @@ const checklistItems = [
   "电子投标文件"
 ];
 
+const bidChecklistItems = [
+  "招标文件关键条款已复核",
+  "客户报价单金额与明细表一致",
+  "技术响应文件已检查",
+  "商务响应文件已检查",
+  "盖章签字页已完成",
+  "电子版文件名和格式已确认"
+];
+
 const money = new Intl.NumberFormat("zh-CN", {
   style: "currency",
   currency: "CNY",
@@ -42,6 +51,8 @@ const numericItemFields = new Set(["qty", "costUnit", "quoteUnit", "taxRate", "l
 
 let state = loadState();
 let currentId = state.currentId || state.projects[0]?.id;
+let currentStep = Number(state.currentStep || 1);
+if (![1, 2, 3, 4].includes(currentStep)) currentStep = 1;
 let activeStatus = "all";
 let saveTimer;
 let lastDeleteAction = null;
@@ -49,6 +60,15 @@ let activeAdviceKey = "";
 let riskExpanded = false;
 
 const els = {
+  workspace: document.querySelector("#workspace"),
+  stepNav: document.querySelector("#stepNav"),
+  stepPages: document.querySelectorAll("[data-step-page]"),
+  topNextBtn: document.querySelector("#topNextBtn"),
+  nextToAdviceBtn: document.querySelector("#nextToAdviceBtn"),
+  backToEditBtn: document.querySelector("#backToEditBtn"),
+  saveHistoryBtn: document.querySelector("#saveHistoryBtn"),
+  continueExportBtn: document.querySelector("#continueExportBtn"),
+  backToReviewBtn: document.querySelector("#backToReviewBtn"),
   projectCount: document.querySelector("#projectCount"),
   statusTabs: document.querySelector("#statusTabs"),
   projectList: document.querySelector("#projectList"),
@@ -64,10 +84,36 @@ const els = {
   quoteScenarios: document.querySelector("#quoteScenarios"),
   marginBand: document.querySelector("#marginBand"),
   riskList: document.querySelector("#riskList"),
+  analysisDecision: document.querySelector("#analysisDecision"),
+  analysisMetrics: document.querySelector("#analysisMetrics"),
+  lossRows: document.querySelector("#lossRows"),
+  lowMarginRows: document.querySelector("#lowMarginRows"),
+  missingInfoList: document.querySelector("#missingInfoList"),
+  highRiskList: document.querySelector("#highRiskList"),
+  exportSummary: document.querySelector("#exportSummary"),
+  tenderFileInput: document.querySelector("#tenderFileInput"),
+  ownFileInput: document.querySelector("#ownFileInput"),
+  bidFileStatus: document.querySelector("#bidFileStatus"),
+  bidResults: document.querySelector("#bidResults"),
+  bidChecklist: document.querySelector("#bidChecklist"),
+  bidMustList: document.querySelector("#bidMustList"),
   savedState: document.querySelector("#savedState"),
   printSheet: document.querySelector("#printSheet"),
   undoBtn: document.querySelector("#undoBtn")
 };
+
+els.stepNav.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-step]");
+  if (!button) return;
+  setStep(Number(button.dataset.step));
+});
+
+els.topNextBtn.addEventListener("click", goNextStep);
+els.nextToAdviceBtn.addEventListener("click", () => setStep(2));
+els.backToEditBtn.addEventListener("click", () => setStep(1));
+els.saveHistoryBtn.addEventListener("click", saveCurrentToHistory);
+els.continueExportBtn.addEventListener("click", () => setStep(3));
+els.backToReviewBtn.addEventListener("click", () => setStep(2));
 
 document.querySelector("#newProjectBtn").addEventListener("click", () => {
   const project = createProject();
@@ -114,6 +160,10 @@ document.querySelector("#importItemsBtn").addEventListener("click", () => {
 document.querySelector("#templateBtn").addEventListener("click", downloadImportTemplate);
 document.querySelector("#customerQuoteBtn").addEventListener("click", () => exportQuoteSheet("customer"));
 document.querySelector("#internalQuoteBtn").addEventListener("click", () => exportQuoteSheet("internal"));
+document.querySelector("#printCustomerBtn").addEventListener("click", () => printQuoteSheet("customer"));
+document.querySelector("#printInternalBtn").addEventListener("click", () => printQuoteSheet("internal"));
+document.querySelector("#tenderFileBtn").addEventListener("click", () => els.tenderFileInput.click());
+document.querySelector("#ownFileBtn").addEventListener("click", () => els.ownFileInput.click());
 
 els.statusTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-status]");
@@ -143,6 +193,9 @@ els.itemsTableBody.addEventListener("click", handleItemClick);
 els.itemsFileInput.addEventListener("change", handleItemsFile);
 els.quoteScenarios.addEventListener("click", handleScenarioClick);
 els.riskList.addEventListener("click", handleRiskToggle);
+els.tenderFileInput.addEventListener("change", (event) => handleBidFile(event, "tenderFileName"));
+els.ownFileInput.addEventListener("change", (event) => handleBidFile(event, "ownFileName"));
+els.bidChecklist.addEventListener("change", handleBidChecklistInput);
 
 render();
 persist();
@@ -166,6 +219,7 @@ function loadState() {
 function persist(mode = "auto") {
   try {
     state.currentId = currentId;
+    state.currentStep = currentStep;
     state.lastSavedAt = new Date().toISOString();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     const savedText = mode === "manual"
@@ -199,7 +253,41 @@ function render() {
   renderCosts();
   renderChecklist();
   renderSummary();
+  renderAnalysis();
+  renderExportStep();
+  renderBidAssistant();
+  renderStep();
   renderPrintSheet();
+}
+
+function setStep(step) {
+  currentStep = Math.min(4, Math.max(1, Number(step) || 1));
+  renderStep();
+  persist("auto");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function goNextStep() {
+  setStep(currentStep >= 4 ? 1 : currentStep + 1);
+}
+
+function renderStep() {
+  els.stepPages.forEach((page) => {
+    page.classList.toggle("active", Number(page.dataset.stepPage) === currentStep);
+  });
+  els.stepNav.querySelectorAll("[data-step]").forEach((button) => {
+    const isActive = Number(button.dataset.step) === currentStep;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-current", isActive ? "step" : "false");
+  });
+  els.workspace.classList.toggle("is-wide", currentStep !== 1);
+  const labels = {
+    1: "下一步",
+    2: "继续导出",
+    3: "标书检查",
+    4: "回到填写"
+  };
+  els.topNextBtn.textContent = labels[currentStep] || "下一步";
 }
 
 function renderStatusTabs() {
@@ -342,23 +430,62 @@ function renderSummary() {
   const calc = calculate(project);
   const risks = getRisks(project, calc);
   els.metrics.innerHTML = `
-    ${metric("总成本", money.format(calc.totalCost), `公司预计要花的钱：设备 ${money.format(calc.itemCost)} + 费用 ${money.format(calc.extraCost)}`)}
-    ${metric("总报价", money.format(calc.salesExTax), "不含税，来自左侧分项报价")}
-    ${metric("毛利额", money.format(calc.grossProfit), "报价减去成本后剩下的钱")}
-    ${metric("毛利率", formatPercent(calc.margin), `建议不低于 ${formatPercent(calc.targetMargin)}`)}
-    ${metric("给客户的含税价", money.format(calc.totalQuote), `包含税额 ${money.format(calc.taxAmount)}`)}
-    ${metric("亏损警戒线", money.format(calc.breakEvenTotalQuote), "报价低于这个数，公司就可能亏钱")}
+    ${metric("总报价", money.format(calc.totalQuote), `不含税 ${money.format(calc.salesExTax)}，税额 ${money.format(calc.taxAmount)}`)}
+    ${metric("毛利率", formatPercent(calc.margin), `目标 ${formatPercent(calc.targetMargin)}`)}
+    ${metric("风险数量", `${risks.length} 项`, risks.some((risk) => risk.level === "high") ? "含高风险项，下一步查看" : "下一步集中检查")}
   `;
-  renderQuoteScenarios(project, calc);
 
   const marginScore = clamp(calc.margin * 100, 0, 45);
   const fillClass = calc.margin < 0 ? "danger" : calc.margin < calc.targetMargin ? "warn" : "";
   els.marginBand.innerHTML = `
     <div class="band-track"><div class="band-fill ${fillClass}" style="width:${Math.max(3, (marginScore / 45) * 100)}%"></div></div>
-    <div class="band-text"><span>当前毛利率 ${formatPercent(calc.margin)}</span><span>风险 ${risks.length} 项</span></div>
+    <div class="band-text"><span>当前毛利率 ${formatPercent(calc.margin)}</span><span>${risks.length ? `风险 ${risks.length} 项` : "暂无明显风险"}</span></div>
+  `;
+}
+
+function renderAnalysis() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const calc = calculate(project);
+  const risks = getRisks(project, calc);
+  const rowAnalysis = getRowAnalysis(project, calc);
+  const missingInfo = getMissingInfo(project);
+  const highRisks = risks.filter((risk) => risk.level === "high");
+  const belowBreakEven = calc.totalQuote < calc.breakEvenTotalQuote;
+  const belowSuggested = calc.totalQuote < calc.minTotalQuote;
+  const canExport = !belowBreakEven && !rowAnalysis.loss.length && !highRisks.length && !missingInfo.some((item) => item.level === "high");
+
+  els.analysisDecision.innerHTML = `
+    <div class="decision-card ${canExport ? "good" : "warn"}">
+      <div>
+        <span>${canExport ? "检查结论" : "需要处理"}</span>
+        <strong>${canExport ? "建议继续导出" : "建议先返回修改"}</strong>
+      </div>
+      <p>${canExport ? "当前报价未发现阻止导出的高风险问题，仍建议人工复核后导出。" : "存在价格、缺项或高风险提醒，先处理后再导出会更稳妥。"}</p>
+    </div>
+    <div class="decision-pair">
+      <span>低于最低可接受报价：<strong>${belowBreakEven ? "是" : "否"}</strong></span>
+      <span>低于建议最低报价：<strong>${belowSuggested ? "是" : "否"}</strong></span>
+    </div>
   `;
 
-  renderRiskList(risks);
+  els.analysisMetrics.innerHTML = `
+    ${metric("总成本", money.format(calc.totalCost), `设备 ${money.format(calc.itemCost)} + 招标费用 ${money.format(calc.extraCost)}`)}
+    ${metric("不含税报价", money.format(calc.salesExTax), "来自分项报价单价")}
+    ${metric("税额", money.format(calc.taxAmount), `综合税率 ${formatPercent(calc.taxRate)}`)}
+    ${metric("含税总价", money.format(calc.totalQuote), "客户看到的投标总价")}
+    ${metric("毛利额", money.format(calc.grossProfit), "不含税报价减总成本")}
+    ${metric("毛利率", formatPercent(calc.margin), `目标 ${formatPercent(calc.targetMargin)}`)}
+    ${metric("最低可接受报价", money.format(calc.breakEvenTotalQuote), "低于该含税价可能亏损")}
+    ${metric("建议最低报价", money.format(calc.minTotalQuote), "按目标毛利率倒推")}
+  `;
+
+  renderQuoteScenarios(project, calc);
+  els.lossRows.innerHTML = renderIssueTable(rowAnalysis.loss, "暂无亏损设备/服务行");
+  els.lowMarginRows.innerHTML = renderIssueTable(rowAnalysis.lowMargin, "暂无毛利率偏低行");
+  els.missingInfoList.innerHTML = renderInfoList(missingInfo, "关键商务信息已填写");
+  els.highRiskList.innerHTML = renderInfoList(highRisks, "当前没有高风险提醒");
+  els.riskList.innerHTML = renderInfoList(risks, "当前项目没有明显报价风险");
 }
 
 function renderQuoteScenarios(project, calc) {
@@ -419,6 +546,57 @@ function renderRiskList(risks) {
     ${riskExpanded ? `<div class="risk-list">${risks
       .map((risk) => `<div class="risk-item ${risk.level}">${risk.text}</div>`)
       .join("")}</div>` : ""}
+  `;
+}
+
+function getRowAnalysis(project, calc) {
+  const lowMarginLine = Math.max(0.08, calc.targetMargin);
+  const rows = project.items.map((item, index) => {
+    const row = calculateItem(item, project.taxRate);
+    return { item, row, index, lowMarginLine };
+  });
+  return {
+    loss: rows.filter(({ row }) => row.sales > 0 && row.grossProfit < 0),
+    lowMargin: rows.filter(({ row }) => row.sales > 0 && row.grossProfit >= 0 && row.margin < lowMarginLine)
+  };
+}
+
+function renderIssueTable(rows, emptyText) {
+  if (!rows.length) return `<div class="empty-state">${emptyText}</div>`;
+  return `
+    <div class="issue-table-wrap">
+      <table class="issue-table">
+        <thead>
+          <tr>
+            <th>设备/服务</th>
+            <th>数量</th>
+            <th>成本小计</th>
+            <th>报价小计</th>
+            <th>毛利率</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(({ item, row }) => `
+            <tr>
+              <td>${escapeHtml(item.name || "未命名")}</td>
+              <td>${decimal.format(numberValue(item.qty))} ${escapeHtml(item.unit || "")}</td>
+              <td>${money.format(row.cost)}</td>
+              <td>${money.format(row.sales)}</td>
+              <td><span class="row-margin ${row.margin < 0 ? "danger" : "warn"}">${formatPercent(row.margin)}</span></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderInfoList(items, emptyText) {
+  if (!items.length) return `<div class="risk-item low">${emptyText}</div>`;
+  return `
+    <div class="risk-list">
+      ${items.map((item) => `<div class="risk-item ${item.level || "medium"}">${escapeHtml(item.text)}</div>`).join("")}
+    </div>
   `;
 }
 
@@ -509,6 +687,34 @@ function exportQuoteSheet(mode) {
   const html = buildQuoteSheetHtml(els.printSheet.innerHTML, suffix);
   downloadText(html, fileName, "text/html;charset=utf-8");
   setSaved(`${suffix}已导出`);
+}
+
+function printQuoteSheet(mode) {
+  renderPrintSheet(mode);
+  window.print();
+  setSaved(`${mode === "internal" ? "内部版" : "客户版"}打印预览已打开`, "success");
+}
+
+function saveCurrentToHistory() {
+  const project = getCurrentProject();
+  if (!project) return;
+  persist("manual");
+  renderProjectList();
+  renderStatusTabs();
+  setSaved("保存成功，已保存为历史报价记录（localStorage）", "success");
+}
+
+function renderExportStep() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const calc = calculate(project);
+  const risks = getRisks(project, calc);
+  const highCount = risks.filter((risk) => risk.level === "high").length;
+  els.exportSummary.innerHTML = `
+    ${metric("含税总价", money.format(calc.totalQuote), "客户报价单显示该金额")}
+    ${metric("毛利率", formatPercent(calc.margin), "仅内部审核单显示")}
+    ${metric("风险状态", highCount ? `${highCount} 项高风险` : "可导出", highCount ? "建议回到第二步复核" : "导出前仍需人工确认")}
+  `;
 }
 
 function buildQuoteSheetHtml(content, title) {
@@ -833,6 +1039,9 @@ function updateProject(project, lightRender = false) {
     renderCurrentStatusBadge(project);
     renderProjectList();
     renderSummary();
+    renderAnalysis();
+    renderExportStep();
+    renderBidAssistant();
     renderPrintSheet();
     renderStatusTabs();
   } else {
@@ -934,6 +1143,19 @@ function makeScenario(key, name, badge, margin, level, risk, summary, calc, taxR
   };
 }
 
+function getMissingInfo(project) {
+  const missing = [];
+  if (!project.contact) missing.push({ level: "high", text: "客户联系人/电话缺失，报价发出和澄清沟通容易断档。" });
+  if (numberValue(project.validDays) <= 0) missing.push({ level: "medium", text: "报价有效期缺失，客户版报价单的有效边界不清晰。" });
+  if (!project.payment) missing.push({ level: "medium", text: "付款条款缺失，垫资成本和回款风险无法判断。" });
+  if (numberValue(project.deliveryDays) <= 0) missing.push({ level: "medium", text: "项目交期缺失，客户交付承诺不完整。" });
+  if (project.items.some((item) => numberValue(item.leadTime) <= 0)) missing.push({ level: "medium", text: "部分设备/服务行交期缺失，请补充后再导出。" });
+  if (numberValue(project.warrantyMonths) <= 0) missing.push({ level: "medium", text: "项目质保缺失，售后责任边界不清晰。" });
+  if (project.items.some((item) => numberValue(item.warranty) <= 0)) missing.push({ level: "medium", text: "部分设备/服务行质保缺失，请补充后再导出。" });
+  if (project.items.some((item) => !item.supplier)) missing.push({ level: "medium", text: "供应商缺失，后续比价、供货和售后追踪会受影响。" });
+  return missing;
+}
+
 function getRisks(project, calc) {
   const risks = [];
   const budget = numberValue(project.budget);
@@ -990,7 +1212,38 @@ function exportCurrentCsv() {
   const project = getCurrentProject();
   if (!project) return;
   const calc = calculate(project);
-  const rows = [
+  const rows = buildDetailExportRows(project, calc);
+  const baseName = sanitizeFileName(project.name || "招标报价");
+  if (window.XLSX) {
+    const worksheet = window.XLSX.utils.aoa_to_sheet(rows);
+    worksheet["!cols"] = [
+      { wch: 16 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 34 }
+    ];
+    const workbook = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(workbook, worksheet, "报价明细");
+    window.XLSX.writeFile(workbook, `${baseName}-明细表.xlsx`);
+    setSaved("明细表 Excel 已导出", "success");
+    return;
+  }
+  downloadCsv(rows, `${baseName}-明细表.csv`);
+  setSaved("Excel 解析库未加载，已导出 CSV 明细表", "success");
+}
+
+function buildDetailExportRows(project, calc) {
+  return [
     ["报价编号", project.quoteNo],
     ["报价单位", project.company],
     ["联系人/电话", project.contact],
@@ -1023,14 +1276,6 @@ function exportCurrentCsv() {
       ];
     })
   ];
-  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
-  const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${sanitizeFileName(project.name || "招标报价")}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 async function handleItemsFile(event) {
@@ -1081,6 +1326,127 @@ function downloadImportTemplate() {
 function setImportStatus(text, type = "") {
   els.importStatus.textContent = text;
   els.importStatus.className = `import-status ${type}`.trim();
+}
+
+function renderBidAssistant() {
+  const project = getCurrentProject();
+  if (!project) return;
+  const bidCheck = project.bidCheck || normalizeBidCheck();
+  const rows = buildBidCheckRows(project);
+  const mustItems = [
+    ...rows.filter((row) => row.level === "high").map((row) => row.problem),
+    ...bidChecklistItems.filter((item) => !bidCheck.checklist[item])
+  ];
+
+  els.bidFileStatus.textContent = `招标方文件：${bidCheck.tenderFileName || "未导入"}；我方文件：${bidCheck.ownFileName || "未导入"}`;
+  els.bidFileStatus.className = `import-status ${bidCheck.tenderFileName && bidCheck.ownFileName ? "success" : ""}`.trim();
+  els.bidResults.innerHTML = renderBidResultTable(rows);
+  els.bidChecklist.innerHTML = bidChecklistItems
+    .map((item) => `
+      <label class="check-item">
+        <input type="checkbox" data-bid-check="${escapeAttr(item)}" ${bidCheck.checklist[item] ? "checked" : ""} />
+        <span>${item}</span>
+      </label>
+    `)
+    .join("");
+  els.bidMustList.innerHTML = mustItems.length
+    ? renderInfoList(mustItems.map((text) => ({ level: "high", text })), "必须完成项已确认")
+    : `<div class="risk-item low">必须完成项已确认</div>`;
+}
+
+function buildBidCheckRows(project) {
+  const missingChecklist = checklistItems.filter((item) => !project.checklist[item]);
+  return [
+    {
+      item: "招标方文件",
+      status: project.bidCheck?.tenderFileName ? "已导入" : "未导入",
+      problem: "招标方文件未导入，无法做最终条款核对。",
+      level: project.bidCheck?.tenderFileName ? "low" : "high"
+    },
+    {
+      item: "我方文件",
+      status: project.bidCheck?.ownFileName ? "已导入" : "未导入",
+      problem: "我方文件未导入，无法做提交前完整性核对。",
+      level: project.bidCheck?.ownFileName ? "low" : "high"
+    },
+    {
+      item: "客户联系人",
+      status: project.contact ? "已填写" : "缺失",
+      problem: "客户联系人/电话缺失。",
+      level: project.contact ? "low" : "high"
+    },
+    {
+      item: "报价有效期",
+      status: numberValue(project.validDays) > 0 ? `${numberValue(project.validDays)} 天` : "缺失",
+      problem: "报价有效期缺失。",
+      level: numberValue(project.validDays) > 0 ? "low" : "medium"
+    },
+    {
+      item: "付款条款",
+      status: project.payment ? "已填写" : "缺失",
+      problem: "付款条款缺失。",
+      level: project.payment ? "low" : "medium"
+    },
+    {
+      item: "交期/质保",
+      status: numberValue(project.deliveryDays) > 0 && numberValue(project.warrantyMonths) > 0 ? "已填写" : "缺失",
+      problem: "交期或质保缺失。",
+      level: numberValue(project.deliveryDays) > 0 && numberValue(project.warrantyMonths) > 0 ? "low" : "medium"
+    },
+    {
+      item: "投标资料清单",
+      status: missingChecklist.length ? `缺 ${missingChecklist.length} 项` : "已完成",
+      problem: missingChecklist.length ? `投标资料清单还有 ${missingChecklist.length} 项未确认。` : "投标资料清单已完成。",
+      level: missingChecklist.length ? "medium" : "low"
+    }
+  ];
+}
+
+function renderBidResultTable(rows) {
+  return `
+    <div class="issue-table-wrap">
+      <table class="issue-table">
+        <thead>
+          <tr>
+            <th>检查项</th>
+            <th>状态</th>
+            <th>提醒</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((row) => `
+            <tr>
+              <td>${escapeHtml(row.item)}</td>
+              <td><span class="risk-chip ${row.level}">${escapeHtml(row.status)}</span></td>
+              <td>${escapeHtml(row.problem)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function handleBidFile(event, fieldName) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const project = getCurrentProject();
+  if (!project) return;
+  project.bidCheck = normalizeBidCheck(project.bidCheck);
+  project.bidCheck[fieldName] = file.name;
+  updateProject(project, true);
+  setSaved("标书文件记录已保存到 localStorage", "success");
+  event.target.value = "";
+}
+
+function handleBidChecklistInput(event) {
+  const item = event.target.dataset.bidCheck;
+  if (!item) return;
+  const project = getCurrentProject();
+  if (!project) return;
+  project.bidCheck = normalizeBidCheck(project.bidCheck);
+  project.bidCheck.checklist[item] = event.target.checked;
+  updateProject(project, true);
 }
 
 async function readImportRows(file) {
@@ -1381,7 +1747,17 @@ function normalizeProject(project) {
     checklist,
     items: Array.isArray(project.items) && project.items.length
       ? project.items.map(normalizeItem)
-      : [createItem()]
+      : [createItem()],
+    bidCheck: normalizeBidCheck(project.bidCheck)
+  };
+}
+
+function normalizeBidCheck(bidCheck = {}) {
+  bidCheck = bidCheck || {};
+  return {
+    tenderFileName: bidCheck.tenderFileName || "",
+    ownFileName: bidCheck.ownFileName || "",
+    checklist: Object.fromEntries(bidChecklistItems.map((item) => [item, Boolean(bidCheck.checklist?.[item])]))
   };
 }
 
@@ -1443,7 +1819,8 @@ function createProject() {
       misc: 0
     },
     checklist,
-    items: [createItem()]
+    items: [createItem()],
+    bidCheck: normalizeBidCheck()
   };
 }
 
