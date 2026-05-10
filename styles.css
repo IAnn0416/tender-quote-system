@@ -694,7 +694,7 @@ svg {
 
 .scenario-head small {
   max-width: 150px;
-  color: var(--red);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 800;
   text-align: right;
@@ -711,10 +711,15 @@ svg {
   border: 1px solid var(--line);
   border-left-width: 4px;
   border-radius: 7px;
-  padding: 12px;
+  padding: 11px;
   background: #fff;
   color: var(--ink);
   text-align: left;
+}
+
+.scenario-card.open {
+  border-color: var(--line-strong);
+  background: #fcfdf9;
 }
 
 .scenario-card:hover {
@@ -758,7 +763,7 @@ svg {
 
 .scenario-price {
   margin-top: 6px;
-  font-size: 22px;
+  font-size: 21px;
   line-height: 1.1;
   font-weight: 850;
 }
@@ -780,6 +785,36 @@ svg {
   color: #475467;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.scenario-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.scenario-action-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.scenario-action {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.scenario-detail {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.scenario-detail strong {
+  font-size: 13px;
 }
 
 .margin-band {
@@ -837,6 +872,37 @@ svg {
 .risk-list {
   display: grid;
   gap: 8px;
+}
+
+.risk-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: var(--surface-strong);
+  color: #475467;
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.risk-summary.high {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.risk-toggle {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.risk-summary + .risk-list {
+  margin-top: 8px;
 }
 
 .risk-item {

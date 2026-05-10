@@ -45,6 +45,8 @@ let currentId = state.currentId || state.projects[0]?.id;
 let activeStatus = "all";
 let saveTimer;
 let lastDeleteAction = null;
+let activeAdviceKey = "recommend";
+let riskExpanded = false;
 
 const els = {
   projectCount: document.querySelector("#projectCount"),
@@ -140,6 +142,7 @@ els.itemsTableBody.addEventListener("focusout", handleFormatBlur);
 els.itemsTableBody.addEventListener("click", handleItemClick);
 els.itemsFileInput.addEventListener("change", handleItemsFile);
 els.quoteScenarios.addEventListener("click", handleScenarioClick);
+els.riskList.addEventListener("click", handleRiskToggle);
 
 render();
 persist();
@@ -355,13 +358,7 @@ function renderSummary() {
     <div class="band-text"><span>当前毛利率 ${formatPercent(calc.margin)}</span><span>风险 ${risks.length} 项</span></div>
   `;
 
-  if (!risks.length) {
-    els.riskList.innerHTML = `<div class="risk-item low">当前项目没有明显报价风险</div>`;
-    return;
-  }
-  els.riskList.innerHTML = `<div class="risk-list">${risks
-    .map((risk) => `<div class="risk-item ${risk.level}">${risk.text}</div>`)
-    .join("")}</div>`;
+  renderRiskList(risks);
 }
 
 function renderQuoteScenarios(project, calc) {
@@ -369,14 +366,14 @@ function renderQuoteScenarios(project, calc) {
   els.quoteScenarios.innerHTML = `
     <div class="scenario-head">
       <div>
-        <span>可直接选择</span>
-        <strong>几个报价方案</strong>
+        <span>系统只做参考</span>
+        <strong>报价建议</strong>
       </div>
-      <small>低于 ${money.format(calc.breakEvenTotalQuote)} 会亏损</small>
+      <small>最终报价以人工审核为准</small>
     </div>
     <div class="scenario-list">
       ${scenarios.map((scenario) => `
-        <button class="scenario-card ${scenario.level}" type="button" data-scenario-price="${scenario.salesExTax}">
+        <div class="scenario-card ${scenario.level} ${activeAdviceKey === scenario.key ? "open" : ""}">
           <div class="scenario-card-title">
             <strong>${scenario.name}</strong>
             <span>${scenario.badge}</span>
@@ -387,10 +384,41 @@ function renderQuoteScenarios(project, calc) {
             <span>毛利 ${money.format(scenario.grossProfit)}</span>
             <span>毛利率 ${formatPercent(scenario.margin)}</span>
           </div>
-          <p>${scenario.risk}</p>
-        </button>
+          <div class="scenario-action-row">
+            <small>${scenario.summary}</small>
+            <button class="button ghost scenario-action" type="button" data-scenario-key="${scenario.key}" aria-expanded="${activeAdviceKey === scenario.key}">
+              查看建议
+            </button>
+          </div>
+          ${activeAdviceKey === scenario.key ? `
+            <div class="scenario-detail">
+              <strong>建议说明</strong>
+              <p>${scenario.risk}</p>
+              <p>仅供内部测算，报价前仍需人工复核成本、供货、付款和招标评分规则。</p>
+            </div>
+          ` : ""}
+        </div>
       `).join("")}
     </div>
+  `;
+}
+
+function renderRiskList(risks) {
+  if (!risks.length) {
+    els.riskList.innerHTML = `<div class="risk-item low">当前项目没有明显报价风险</div>`;
+    return;
+  }
+  const hasHighRisk = risks.some((risk) => risk.level === "high");
+  els.riskList.innerHTML = `
+    <div class="risk-summary ${hasHighRisk ? "high" : ""}">
+      <span>当前有 ${risks.length} 项风险${hasHighRisk ? "，含高风险项" : ""}</span>
+      <button class="button ghost risk-toggle" type="button" data-risk-toggle="${riskExpanded ? "close" : "open"}">
+        ${riskExpanded ? "收起" : "展开查看"}
+      </button>
+    </div>
+    ${riskExpanded ? `<div class="risk-list">${risks
+      .map((risk) => `<div class="risk-item ${risk.level}">${risk.text}</div>`)
+      .join("")}</div>` : ""}
   `;
 }
 
@@ -780,14 +808,21 @@ function renderUndoState() {
 }
 
 function handleScenarioClick(event) {
-  const card = event.target.closest("[data-scenario-price]");
-  if (!card) return;
+  const button = event.target.closest("[data-scenario-key]");
+  if (!button) return;
   const project = getCurrentProject();
   if (!project) return;
-  const targetSalesExTax = numberValue(card.dataset.scenarioPrice);
-  applyScenarioPrice(project, targetSalesExTax);
-  updateProject(project);
-  setImportStatus("已按所选报价方案自动调整分项报价", "success");
+  activeAdviceKey = button.dataset.scenarioKey;
+  renderQuoteScenarios(project, calculate(project));
+}
+
+function handleRiskToggle(event) {
+  const button = event.target.closest("[data-risk-toggle]");
+  if (!button) return;
+  riskExpanded = button.dataset.riskToggle === "open";
+  const project = getCurrentProject();
+  if (!project) return;
+  renderRiskList(getRisks(project, calculate(project)));
 }
 
 function updateProject(project, lightRender = false) {
@@ -864,10 +899,10 @@ function getQuoteScenarios(project, calc) {
   const competitiveMargin = clamp(Math.min(targetMargin * 0.55, 0.08), 0.03, 0.1);
   const steadyMargin = clamp(targetMargin + 0.05, targetMargin, 0.36);
   const scenarios = [
-    makeScenario("保本线", "底线", 0, "high", "只覆盖内部总成本，低于这一档就是亏损；通常不建议作为正式报价，只用于守底线。", calc, taxRate, budget),
-    makeScenario("低价竞争", "抢单", competitiveMargin, "warn", "价格更有竞争力，但利润薄，安装、质保、回款延迟或漏项都会明显放大风险。", calc, taxRate, budget),
-    makeScenario("建议报价", "目标", targetMargin, "good", "按目标毛利率倒推，适合作为正常投标主报价，兼顾利润和中标可能性。", calc, taxRate, budget),
-    makeScenario("稳健报价", "利润", steadyMargin, "safe", "利润和售后缓冲更足，但如果招标方价格权重较高，中标风险会增加。", calc, taxRate, budget)
+    makeScenario("break-even", "保本参考", "守底线", 0, "high", "只覆盖内部总成本，低于这一档就是亏损；通常不建议作为正式报价，只用于判断底线。", "看亏损边界", calc, taxRate, budget),
+    makeScenario("competitive", "低价参考", "价格优先", competitiveMargin, "warn", "价格更有竞争力，但利润薄，安装、质保、回款延迟或漏项都会明显放大风险。", "看竞争低价", calc, taxRate, budget),
+    makeScenario("recommend", "推荐报价", "推荐", targetMargin, "good", "按目标毛利率倒推，适合作为正常投标主报价的参考，兼顾利润和中标可能性。", "看常规建议", calc, taxRate, budget),
+    makeScenario("steady", "稳健报价", "稳一点", steadyMargin, "safe", "利润和售后缓冲更足，但如果招标方价格权重较高，中标风险会增加。", "看利润缓冲", calc, taxRate, budget)
   ];
   return scenarios.map((scenario) => ({
     ...scenario,
@@ -875,7 +910,7 @@ function getQuoteScenarios(project, calc) {
   }));
 }
 
-function makeScenario(name, badge, margin, level, risk, calc, taxRate, budget) {
+function makeScenario(key, name, badge, margin, level, risk, summary, calc, taxRate, budget) {
   const salesExTax = calc.totalCost / Math.max(0.01, 1 - margin);
   const taxAmount = salesExTax * taxRate;
   const totalQuote = salesExTax + taxAmount;
@@ -884,10 +919,12 @@ function makeScenario(name, badge, margin, level, risk, calc, taxRate, budget) {
     ? `该档超过预算 ${money.format(totalQuote - budget)}。`
     : "";
   return {
+    key,
     name,
     badge,
     level,
     risk,
+    summary,
     margin,
     salesExTax,
     taxAmount,
@@ -895,17 +932,6 @@ function makeScenario(name, badge, margin, level, risk, calc, taxRate, budget) {
     grossProfit,
     budgetWarning
   };
-}
-
-function applyScenarioPrice(project, targetSalesExTax) {
-  const currentSalesExTax = project.items.reduce((sum, item) => sum + numberValue(item.qty) * numberValue(item.quoteUnit), 0);
-  const fallbackCost = project.items.reduce((sum, item) => sum + numberValue(item.qty) * numberValue(item.costUnit), 0);
-  const baseTotal = currentSalesExTax > 0 ? currentSalesExTax : fallbackCost;
-  const ratio = baseTotal > 0 ? targetSalesExTax / baseTotal : 1;
-  project.items = project.items.map((item) => ({
-    ...item,
-    quoteUnit: roundMoney(numberValue(item.quoteUnit || item.costUnit) * ratio)
-  }));
 }
 
 function getRisks(project, calc) {
