@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>招标报价系统</title>
-    <link rel="stylesheet" href="./styles.css?v=20260510-advice" />
+    <link rel="stylesheet" href="./styles.css?v=20260510-advice-layout" />
   </head>
   <body>
     <svg aria-hidden="true" class="icon-sprite">
@@ -118,6 +118,8 @@
             <form class="form-grid" id="projectForm"></form>
           </section>
 
+          <section class="quote-scenarios advice-workspace" id="quoteScenarios" aria-label="报价建议"></section>
+
           <section class="panel quote-table-panel" aria-labelledby="itemsTitle">
             <div class="panel-title compact">
               <div>
@@ -206,7 +208,6 @@
               <span class="saved-state" id="savedState">保存到 localStorage</span>
             </div>
             <div class="metric-stack" id="metrics"></div>
-            <div class="quote-scenarios" id="quoteScenarios"></div>
             <div class="margin-band" id="marginBand"></div>
             <div class="risk-box">
               <div class="risk-title">
@@ -223,6 +224,6 @@
     <section id="printSheet" aria-label="打印报价单"></section>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./app.js?v=20260510-advice"></script>
+    <script src="./app.js?v=20260510-advice-layout"></script>
   </body>
 </html>

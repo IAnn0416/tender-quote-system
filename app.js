@@ -45,7 +45,7 @@ let currentId = state.currentId || state.projects[0]?.id;
 let activeStatus = "all";
 let saveTimer;
 let lastDeleteAction = null;
-let activeAdviceKey = "recommend";
+let activeAdviceKey = "";
 let riskExpanded = false;
 
 const els = {
@@ -387,7 +387,7 @@ function renderQuoteScenarios(project, calc) {
           <div class="scenario-action-row">
             <small>${scenario.summary}</small>
             <button class="button ghost scenario-action" type="button" data-scenario-key="${scenario.key}" aria-expanded="${activeAdviceKey === scenario.key}">
-              查看建议
+              ${activeAdviceKey === scenario.key ? "收起建议" : "查看建议"}
             </button>
           </div>
           ${activeAdviceKey === scenario.key ? `
@@ -812,7 +812,7 @@ function handleScenarioClick(event) {
   if (!button) return;
   const project = getCurrentProject();
   if (!project) return;
-  activeAdviceKey = button.dataset.scenarioKey;
+  activeAdviceKey = activeAdviceKey === button.dataset.scenarioKey ? "" : button.dataset.scenarioKey;
   renderQuoteScenarios(project, calculate(project));
 }
 

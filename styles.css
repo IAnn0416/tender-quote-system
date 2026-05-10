@@ -659,11 +659,15 @@ svg {
 }
 
 .quote-scenarios {
-  margin-top: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface-strong);
   padding: 12px;
+}
+
+.advice-workspace {
+  box-shadow: var(--shadow);
+  background: var(--surface);
 }
 
 .scenario-head,
@@ -704,6 +708,10 @@ svg {
 .scenario-list {
   display: grid;
   gap: 8px;
+}
+
+.advice-workspace .scenario-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .scenario-card {
@@ -950,6 +958,10 @@ svg {
     grid-template-columns: 260px minmax(0, 1fr);
   }
 
+  .advice-workspace .scenario-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .summary-panel {
     grid-column: 1 / -1;
   }
@@ -977,6 +989,10 @@ svg {
   .workspace {
     grid-template-columns: 1fr;
     padding: 12px;
+  }
+
+  .advice-workspace .scenario-list {
+    grid-template-columns: 1fr;
   }
 
   .form-grid,
