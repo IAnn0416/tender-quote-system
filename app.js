@@ -174,7 +174,7 @@ function renderStatusTabs() {
       const count = tab.key === "all"
         ? state.projects.length
         : state.projects.filter((project) => project.status === tab.key).length;
-      return `<button class="status-tab ${activeStatus === tab.key ? "active" : ""}" type="button" data-status="${tab.key}">${tab.label} ${count}</button>`;
+      return `<button class="status-tab ${activeStatus === tab.key ? "active" : ""}" type="button" data-status="${tab.key}"><span>${tab.label}</span><strong>${count}</strong></button>`;
     })
     .join("");
 }
@@ -201,7 +201,7 @@ function renderProjectList() {
             <span class="pill ${project.status}">${statusLabels[project.status] || "待定"}</span>
           </div>
           <p>${escapeHtml(project.client || "未填客户")} · ${deadline}</p>
-          <p>${money.format(calc.totalQuote)} · 毛利率 ${formatPercent(calc.margin)}</p>
+          <p>含税 ${money.format(calc.totalQuote)} · 毛利 ${formatPercent(calc.margin)}</p>
         </button>
       `;
     })
@@ -216,8 +216,8 @@ function renderEditor() {
     ${field("项目名称", "name", "text", project.name, "span-2")}
     ${field("客户/招标单位", "client", "text", project.client, "span-2")}
     ${field("报价单位", "company", "text", project.company, "span-2")}
-    ${field("报价编号", "quoteNo", "text", project.quoteNo)}
-    ${field("联系人/电话", "contact", "text", project.contact)}
+    ${field("报价编号", "quoteNo", "text", project.quoteNo, "", "系统可自动生成")}
+    ${field("联系人/电话", "contact", "text", project.contact, "", "姓名 + 手机号")}
     ${field("代理机构", "agency", "text", project.agency)}
     ${field("项目预算", "budget", "number", project.budget)}
     ${field("开标日期", "deadline", "date", project.deadline)}
@@ -226,7 +226,7 @@ function renderEditor() {
     ${field("税率", "taxRate", "number", project.taxRate, "", "0.13")}
     ${field("目标毛利率", "targetMargin", "number", project.targetMargin, "", "0.18")}
     ${field("交货期(天)", "deliveryDays", "number", project.deliveryDays)}
-    ${field("付款方式", "payment", "text", project.payment, "span-2")}
+    ${field("付款方式", "payment", "text", project.payment, "span-2", "例如：30%预付款，60%到货，10%质保金")}
     ${field("质保(月)", "warrantyMonths", "number", project.warrantyMonths)}
     ${field("报价有效期(天)", "validDays", "number", project.validDays)}
     <div class="field span-4">
@@ -299,12 +299,12 @@ function renderSummary() {
   const calc = calculate(project);
   const risks = getRisks(project, calc);
   els.metrics.innerHTML = `
-    ${metric("总成本", money.format(calc.totalCost), `设备 ${money.format(calc.itemCost)} · 费用 ${money.format(calc.extraCost)}`)}
-    ${metric("总报价", money.format(calc.salesExTax), "当前分项报价合计，不含税")}
-    ${metric("毛利额", money.format(calc.grossProfit), `报价减总成本`)}
-    ${metric("毛利率", formatPercent(calc.margin), `目标 ${formatPercent(calc.targetMargin)}`)}
-    ${metric("含税总价", money.format(calc.totalQuote), `税额 ${money.format(calc.taxAmount)} · 税率 ${formatPercent(calc.taxRate)}`)}
-    ${metric("亏损警戒线", money.format(calc.breakEvenTotalQuote), `低于该含税价会亏损，不含税 ${money.format(calc.breakEvenSalesExTax)}`)}
+    ${metric("总成本", money.format(calc.totalCost), `公司预计要花的钱：设备 ${money.format(calc.itemCost)} + 费用 ${money.format(calc.extraCost)}`)}
+    ${metric("总报价", money.format(calc.salesExTax), "不含税，来自左侧分项报价")}
+    ${metric("毛利额", money.format(calc.grossProfit), "报价减去成本后剩下的钱")}
+    ${metric("毛利率", formatPercent(calc.margin), `建议不低于 ${formatPercent(calc.targetMargin)}`)}
+    ${metric("给客户的含税价", money.format(calc.totalQuote), `包含税额 ${money.format(calc.taxAmount)}`)}
+    ${metric("亏损警戒线", money.format(calc.breakEvenTotalQuote), "报价低于这个数，公司就可能亏钱")}
   `;
   renderQuoteScenarios(project, calc);
 
@@ -329,10 +329,10 @@ function renderQuoteScenarios(project, calc) {
   els.quoteScenarios.innerHTML = `
     <div class="scenario-head">
       <div>
-        <span>报价方案</span>
-        <strong>多档报价建议</strong>
+        <span>可直接选择</span>
+        <strong>几个报价方案</strong>
       </div>
-      <small>低于 ${money.format(calc.breakEvenTotalQuote)} 含税即亏损</small>
+      <small>低于 ${money.format(calc.breakEvenTotalQuote)} 会亏损</small>
     </div>
     <div class="scenario-list">
       ${scenarios.map((scenario) => `
@@ -365,8 +365,8 @@ function renderPrintSheet(mode = "customer") {
     <div class="print-title">
       <div>
         <p class="print-company">${escapeHtml(project.company || "报价单位")}</p>
-        <h1>${isInternal ? "内部报价审核单" : "客户版报价单"}</h1>
-        <p class="print-version">${isInternal ? "内部使用：含成本、利润、供应商信息" : "对外发送版本"}</p>
+        <h1>${isInternal ? "公司内部审核单" : "客户报价单"}</h1>
+        <p class="print-version">${isInternal ? "内部使用：含完整成本、利润、供应商信息" : "对外发送版本"}</p>
         <p>报价编号：${escapeHtml(project.quoteNo || "-")}</p>
         <p>项目名称：${escapeHtml(project.name || "")}</p>
       </div>
@@ -437,7 +437,7 @@ function renderPrintSheet(mode = "customer") {
 function exportQuoteSheet(mode) {
   renderPrintSheet(mode);
   const project = getCurrentProject();
-  const suffix = mode === "internal" ? "内部版报价单" : "客户版报价单";
+  const suffix = mode === "internal" ? "公司内部审核单" : "客户报价单";
   const fileName = `${sanitizeFileName(project?.name || "招标报价")}-${suffix}.html`;
   const html = buildQuoteSheetHtml(els.printSheet.innerHTML, suffix);
   downloadText(html, fileName, "text/html;charset=utf-8");

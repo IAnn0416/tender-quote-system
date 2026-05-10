@@ -63,10 +63,10 @@ svg {
 
 .topbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 24px;
+  padding: 20px 24px;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(12px);
@@ -82,8 +82,21 @@ svg {
 }
 
 .topbar h1 {
-  font-size: 24px;
+  font-size: 26px;
   line-height: 1.2;
+}
+
+.topbar-note,
+.section-help,
+.rail-head small {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.rail-head small {
+  display: block;
 }
 
 .eyebrow,
@@ -125,23 +138,24 @@ svg {
 
 .button,
 .icon-button {
-  min-height: 38px;
+  min-height: 44px;
   border: 1px solid transparent;
   border-radius: var(--radius);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  font-size: 15px;
   font-weight: 750;
   white-space: nowrap;
 }
 
 .button {
-  padding: 0 14px;
+  padding: 0 16px;
 }
 
 .icon-button {
-  width: 38px;
+  width: 44px;
   color: var(--ink);
   background: var(--surface);
   border-color: var(--line);
@@ -156,6 +170,7 @@ svg {
 .button.primary {
   background: var(--teal);
   color: #fff;
+  font-weight: 820;
 }
 
 .button.primary:hover {
@@ -210,7 +225,8 @@ svg {
 
 .rail-head {
   justify-content: space-between;
-  padding: 14px;
+  gap: 12px;
+  padding: 16px;
 }
 
 .rail-head strong {
@@ -228,17 +244,39 @@ svg {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--muted);
-  border-radius: 999px;
-  min-height: 32px;
-  padding: 0 11px;
-  font-size: 13px;
+  border-radius: var(--radius);
+  min-height: 42px;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 14px;
   font-weight: 760;
+}
+
+.status-tab strong {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2f7;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1;
 }
 
 .status-tab.active {
   color: #fff;
   background: var(--ink);
   border-color: var(--ink);
+}
+
+.status-tab.active strong {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 .project-list {
@@ -249,7 +287,7 @@ svg {
 .project-card {
   width: 100%;
   text-align: left;
-  padding: 13px;
+  padding: 15px;
 }
 
 .project-card.active {
@@ -269,14 +307,14 @@ svg {
 
 .project-card h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.25;
 }
 
 .project-card p {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -339,6 +377,7 @@ svg {
 }
 
 .panel-title {
+  align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 14px;
@@ -383,7 +422,7 @@ svg {
 .field label,
 .check-item span {
   color: #344054;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 760;
 }
 
@@ -392,12 +431,13 @@ svg {
 .field textarea,
 .quote-table input {
   width: 100%;
-  min-height: 38px;
+  min-height: 42px;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--surface-strong);
   color: var(--ink);
   padding: 8px 10px;
+  font-size: 15px;
   outline: none;
 }
 
@@ -460,7 +500,7 @@ svg {
 }
 
 .row-margin {
-  min-height: 38px;
+  min-height: 42px;
   min-width: 76px;
   border-radius: 7px;
   display: inline-flex;
@@ -522,7 +562,7 @@ svg {
 }
 
 .check-item {
-  min-height: 40px;
+  min-height: 46px;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -533,8 +573,8 @@ svg {
 }
 
 .check-item input {
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
   accent-color: var(--teal);
   flex: 0 0 auto;
 }
@@ -573,7 +613,7 @@ svg {
 .metric strong {
   display: block;
   margin-top: 6px;
-  font-size: 24px;
+  font-size: 26px;
   line-height: 1.15;
 }
 
@@ -637,7 +677,7 @@ svg {
   border: 1px solid var(--line);
   border-left-width: 4px;
   border-radius: 7px;
-  padding: 10px;
+  padding: 12px;
   background: #fff;
   color: var(--ink);
   text-align: left;
@@ -768,7 +808,7 @@ svg {
 .risk-item {
   border-radius: 7px;
   padding: 10px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
   border: 1px solid var(--line);
   background: var(--surface-strong);

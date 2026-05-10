@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>招标报价系统</title>
-    <link rel="stylesheet" href="./styles.css?v=20260509-workbench" />
+    <link rel="stylesheet" href="./styles.css?v=20260510-simple" />
   </head>
   <body>
     <svg aria-hidden="true" class="icon-sprite">
@@ -47,6 +47,7 @@
         <div>
           <p class="eyebrow">传统能源设备</p>
           <h1>招标报价工作台</h1>
+          <p class="topbar-note">按顺序操作：建项目、导入清单、检查风险、导出报价单。</p>
         </div>
         <div class="topbar-actions">
           <button class="button ghost" id="saveBtn" type="button">
@@ -55,15 +56,15 @@
           </button>
           <button class="button ghost" id="exportBtn" type="button">
             <svg><use href="#i-download"></use></svg>
-            内部表格
+            导出明细表
           </button>
           <button class="button ghost" id="customerQuoteBtn" type="button">
             <svg><use href="#i-download"></use></svg>
-            导出客户版
+            给客户看的报价单
           </button>
           <button class="button primary" id="internalQuoteBtn" type="button">
             <svg><use href="#i-download"></use></svg>
-            导出内部版
+            公司内部审核单
           </button>
         </div>
       </header>
@@ -74,6 +75,7 @@
             <div>
               <span class="section-kicker">项目</span>
               <strong id="projectCount">0 个</strong>
+              <small>先选项目，再填报价。</small>
             </div>
             <button class="icon-button" id="newProjectBtn" type="button" aria-label="新增项目" title="新增项目">
               <svg><use href="#i-plus"></use></svg>
@@ -89,6 +91,7 @@
               <div>
                 <span class="section-kicker">招标信息</span>
                 <h2 id="projectTitle">项目</h2>
+                <p class="section-help">这里填客户、开标时间、付款方式等基本信息。</p>
               </div>
               <button class="button ghost" id="duplicateBtn" type="button">
                 <svg><use href="#i-copy"></use></svg>
@@ -103,20 +106,21 @@
               <div>
                 <span class="section-kicker">设备清单</span>
                 <h2 id="itemsTitle">分项报价</h2>
+                <p class="section-help">推荐先下载模板，用 Excel 填好后再导入。</p>
               </div>
               <div class="panel-actions">
                 <input id="itemsFileInput" class="file-input" type="file" accept=".csv,.tsv,.txt" />
                 <button class="button ghost" id="importItemsBtn" type="button">
                   <svg><use href="#i-upload"></use></svg>
-                  导入清单
+                  从表格导入
                 </button>
                 <button class="button ghost" id="templateBtn" type="button">
                   <svg><use href="#i-download"></use></svg>
-                  下载模板
+                  下载Excel模板
                 </button>
                 <button class="button secondary" id="addItemBtn" type="button">
                   <svg><use href="#i-plus"></use></svg>
-                  添加设备
+                  手动加一行
                 </button>
               </div>
             </div>
@@ -150,6 +154,7 @@
                 <div>
                   <span class="section-kicker">内部成本</span>
                   <h2>招标费用</h2>
+                  <p class="section-help">填运费、安装、质保等额外成本。</p>
                 </div>
               </div>
               <form class="cost-grid" id="costForm"></form>
@@ -160,6 +165,7 @@
                 <div>
                   <span class="section-kicker">投标资料</span>
                   <h2>合规清单</h2>
+                  <p class="section-help">准备好了就打勾，系统会提醒缺项。</p>
                 </div>
               </div>
               <div class="checklist" id="checklist"></div>
@@ -173,6 +179,7 @@
               <div>
                 <span class="section-kicker">测算结果</span>
                 <h2>报价汇总</h2>
+                <p class="section-help">右侧会自动算价格、利润和风险。</p>
               </div>
               <span class="saved-state" id="savedState">已同步</span>
             </div>
@@ -193,6 +200,6 @@
 
     <section id="printSheet" aria-label="打印报价单"></section>
 
-    <script src="./app.js?v=20260509-workbench"></script>
+    <script src="./app.js?v=20260510-simple"></script>
   </body>
 </html>
