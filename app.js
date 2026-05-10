@@ -1997,7 +1997,9 @@ function updateImportPreview() {
   const modeText = pendingImport.priceMode === "cost"
     ? "这张表更像成本清单，单价/总价已优先按成本处理。"
     : "这张表更像报价清单，单价/总价已优先按报价处理。";
-  els.importMapperStatus.textContent = `${modeText} 预计可导入 ${result.items.length} 行，跳过 ${result.skippedCount} 行。`;
+  const postSummaryText = result.postSummaryRows ? `，其中后续费用/服务 ${result.postSummaryRows} 行` : "";
+  const summaryText = result.summaryRows ? `，已跳过汇总/税金/利润 ${result.summaryRows} 行` : "";
+  els.importMapperStatus.textContent = `${modeText} 预计可导入 ${result.items.length} 行${postSummaryText}${summaryText}。`;
   els.importMapperStatus.className = `import-status ${result.items.length ? "success" : "error"}`.trim();
   els.importConfirmBtn.disabled = !result.items.length;
   els.importPreview.innerHTML = renderImportPreview(result);
@@ -2069,9 +2071,13 @@ function buildImportItems(draft, project) {
   const context = {
     headerName: cleanCell(sheet.rows[headerIndex]?.[(draft.mapping || {}).name]),
     mapping: draft.mapping || {},
+    specIndexes: getImportSpecIndexes(draft),
     autoPrice: draft.autoPrice,
     targetMargin: clamp(rateValue(project?.targetMargin ?? 0.18), 0, 0.8),
-    defaultTaxRate: project?.taxRate ?? 0
+    defaultTaxRate: project?.taxRate ?? 0,
+    hasSeenTotalRow: false,
+    postSummaryRows: 0,
+    summaryRows: 0
   };
   const items = [];
   let skippedCount = 0;
@@ -2083,7 +2089,12 @@ function buildImportItems(draft, project) {
       skippedCount += row.some(Boolean) ? 1 : 0;
     }
   });
-  return { items, skippedCount };
+  return {
+    items,
+    skippedCount,
+    postSummaryRows: context.postSummaryRows,
+    summaryRows: context.summaryRows
+  };
 }
 
 function importRowToItem(row, context) {
@@ -2094,16 +2105,24 @@ function importRowToItem(row, context) {
   const name = value("name");
   const model = value("model");
   const supplier = value("supplier");
-  const spec = value("spec");
+  const spec = mergeImportSpec(row, context);
   const qtyInfo = parseImportQuantity(value("qty"));
   const filledCount = row.filter(Boolean).length;
   const firstText = cleanCell(name || row[0]);
 
-  if (isImportSummaryLabel(firstText)) return null;
+  if (isImportTotalLabel(firstText)) {
+    context.hasSeenTotalRow = true;
+    context.summaryRows += 1;
+    return null;
+  }
+  if (context.hasSeenTotalRow && isPostSummaryDuplicateLabel(firstText)) {
+    context.summaryRows += 1;
+    return null;
+  }
   if (firstText && context.headerName && normalizeHeader(firstText) === normalizeHeader(context.headerName) && filledCount <= 2) return null;
 
   const qty = qtyInfo.qty || 1;
-  const unitForTotal = qtyInfo.isMeasurementLike ? 1 : qty;
+  const unitForTotal = qtyInfo.isMeasurementLike ? 1 : Math.max(0.000001, qty);
   const costTotal = numberValue(value("costTotal"));
   const quoteTotal = numberValue(value("quoteTotal"));
   let costUnit = numberValue(value("costUnit"));
@@ -2126,6 +2145,8 @@ function importRowToItem(row, context) {
   if (!hasUsableText && !hasPrice) return null;
   if (!name && !model && !hasPrice) return null;
 
+  if (context.hasSeenTotalRow) context.postSummaryRows += 1;
+
   return normalizeItem({
     id: uid(),
     name: name || model || "未命名项目",
@@ -2142,8 +2163,27 @@ function importRowToItem(row, context) {
   });
 }
 
+function getImportSpecIndexes(draft) {
+  const mapping = draft.mapping || {};
+  const selectedIndexes = new Set(Object.values(mapping).filter((value) => value !== undefined));
+  const indexes = new Set();
+  if (mapping.spec !== undefined) indexes.add(mapping.spec);
+  (draft.columns || []).forEach((column) => {
+    if (selectedIndexes.has(column.index) && mapping.spec !== column.index) return;
+    if (resolveImportField(column.label, draft.priceMode) === "spec") indexes.add(column.index);
+  });
+  return Array.from(indexes);
+}
+
+function mergeImportSpec(row, context) {
+  const values = (context.specIndexes || [])
+    .map((index) => cleanCell(row[index]))
+    .filter(Boolean);
+  return [...new Set(values)].join("；");
+}
+
 function preferTotalUnitPrice(unitPrice, totalPrice, qty) {
-  const impliedUnit = totalPrice / Math.max(1, qty);
+  const impliedUnit = totalPrice / Math.max(0.000001, qty);
   const diffRate = Math.abs(impliedUnit - unitPrice) / Math.max(1, Math.abs(unitPrice));
   return diffRate > 0.02 ? impliedUnit : unitPrice;
 }
@@ -2163,9 +2203,14 @@ function parseImportQuantity(value) {
   return { qty, unit, isMeasurementLike: false };
 }
 
-function isImportSummaryLabel(value) {
+function isImportTotalLabel(value) {
   const text = normalizeHeader(value);
   return /^(合计|小计|总计|税金|利润|报价|总报价|最终报价|不含税合计|含税合计|汇总)$/.test(text);
+}
+
+function isPostSummaryDuplicateLabel(value) {
+  const text = normalizeHeader(value);
+  return /^(材料|材料费|主材|设备材料|物料)$/.test(text);
 }
 
 function getPendingImportSheet(draft = pendingImport) {
