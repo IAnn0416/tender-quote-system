@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>招标报价系统</title>
-    <link rel="stylesheet" href="./styles.css?v=20260510-steps" />
+    <link rel="stylesheet" href="./styles.css?v=20260510-step-polish" />
   </head>
   <body>
     <svg aria-hidden="true" class="icon-sprite">
@@ -62,6 +62,9 @@
           <button class="button ghost" id="undoBtn" type="button" disabled>
             <svg><use href="#i-undo"></use></svg>
             撤销删除
+          </button>
+          <button class="button ghost" id="topPrevBtn" type="button">
+            上一步
           </button>
           <button class="button primary" id="topNextBtn" type="button">
             下一步
@@ -351,7 +354,7 @@
               <div class="bid-upload-grid">
                 <div class="bid-upload-card">
                   <strong>招标方文件</strong>
-                  <input id="tenderFileInput" class="file-input" type="file" />
+                  <input id="tenderFileInput" class="file-input" type="file" accept=".txt,.csv,.xlsx,.xls,.doc,.docx,.pdf" />
                   <button class="button ghost" id="tenderFileBtn" type="button">
                     <svg><use href="#i-upload"></use></svg>
                     导入招标方文件
@@ -359,14 +362,18 @@
                 </div>
                 <div class="bid-upload-card">
                   <strong>我方文件</strong>
-                  <input id="ownFileInput" class="file-input" type="file" />
+                  <input id="ownFileInput" class="file-input" type="file" accept=".txt,.csv,.xlsx,.xls,.doc,.docx,.pdf" />
                   <button class="button ghost" id="ownFileBtn" type="button">
                     <svg><use href="#i-upload"></use></svg>
                     导入我方文件
                   </button>
                 </div>
               </div>
+              <p class="section-help">txt、csv、xlsx 可读取文本预览；Word/PDF 先记录文件信息，后续再完善正文解析。</p>
               <div class="import-status" id="bidFileStatus"></div>
+              <div class="step-actions">
+                <button class="button primary" id="runBidCheckBtn" type="button">一键检查</button>
+              </div>
             </section>
 
             <section class="analysis-grid">
@@ -421,6 +428,6 @@
     <section id="printSheet" aria-label="打印报价单"></section>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./app.js?v=20260510-steps"></script>
+    <script src="./app.js?v=20260510-step-polish"></script>
   </body>
 </html>

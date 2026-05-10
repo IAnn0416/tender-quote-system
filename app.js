@@ -30,6 +30,22 @@ const bidChecklistItems = [
   "电子版文件名和格式已确认"
 ];
 
+const bidCheckRules = [
+  { key: "companyIntro", label: "公司介绍", terms: ["公司介绍", "公司简介", "企业介绍", "单位简介"] },
+  { key: "technicalPlan", label: "技术方案", terms: ["技术方案", "技术响应", "技术文件", "施工方案", "供货方案"] },
+  { key: "quoteTable", label: "报价表", terms: ["报价表", "报价汇总", "投标报价", "分项报价"] },
+  { key: "delivery", label: "交付周期", terms: ["交付周期", "交货期", "供货期", "交期", "交付时间"] },
+  { key: "warranty", label: "质保承诺", terms: ["质保", "保修", "质量保证"] },
+  { key: "payment", label: "付款条款", terms: ["付款", "支付", "结算"] },
+  { key: "afterSales", label: "售后服务", terms: ["售后", "服务承诺", "维修响应"] },
+  { key: "qualification", label: "资质文件", terms: ["营业执照", "资质", "检测报告", "合格证"] },
+  { key: "authorization", label: "授权书", terms: ["授权书", "法人授权", "厂家授权", "代理证明"] },
+  { key: "deviation", label: "偏离表", terms: ["偏离表", "技术偏离", "商务偏离"] },
+  { key: "sealSignature", label: "盖章签字", terms: ["盖章", "签字", "签章", "授权代表"] },
+  { key: "contact", label: "联系人信息", terms: ["联系人", "联系电话", "电话", "手机"] },
+  { key: "validity", label: "报价有效期", terms: ["报价有效期", "投标有效期", "有效期"] }
+];
+
 const money = new Intl.NumberFormat("zh-CN", {
   style: "currency",
   currency: "CNY",
@@ -63,6 +79,7 @@ const els = {
   workspace: document.querySelector("#workspace"),
   stepNav: document.querySelector("#stepNav"),
   stepPages: document.querySelectorAll("[data-step-page]"),
+  topPrevBtn: document.querySelector("#topPrevBtn"),
   topNextBtn: document.querySelector("#topNextBtn"),
   nextToAdviceBtn: document.querySelector("#nextToAdviceBtn"),
   backToEditBtn: document.querySelector("#backToEditBtn"),
@@ -97,6 +114,7 @@ const els = {
   bidResults: document.querySelector("#bidResults"),
   bidChecklist: document.querySelector("#bidChecklist"),
   bidMustList: document.querySelector("#bidMustList"),
+  runBidCheckBtn: document.querySelector("#runBidCheckBtn"),
   savedState: document.querySelector("#savedState"),
   printSheet: document.querySelector("#printSheet"),
   undoBtn: document.querySelector("#undoBtn")
@@ -108,6 +126,7 @@ els.stepNav.addEventListener("click", (event) => {
   setStep(Number(button.dataset.step));
 });
 
+els.topPrevBtn.addEventListener("click", goPrevStep);
 els.topNextBtn.addEventListener("click", goNextStep);
 els.nextToAdviceBtn.addEventListener("click", () => setStep(2));
 els.backToEditBtn.addEventListener("click", () => setStep(1));
@@ -127,16 +146,7 @@ document.querySelector("#newProjectBtn").addEventListener("click", () => {
 document.querySelector("#duplicateBtn").addEventListener("click", () => {
   const current = getCurrentProject();
   if (!current) return;
-  const copy = {
-    ...structuredClone(current),
-    id: uid(),
-    name: `${current.name} - 复盘版`,
-    status: "draft"
-  };
-  state.projects.unshift(copy);
-  currentId = copy.id;
-  persist();
-  render();
+  duplicateProject(current.id);
 });
 
 document.querySelector("#addItemBtn").addEventListener("click", () => {
@@ -164,6 +174,7 @@ document.querySelector("#printCustomerBtn").addEventListener("click", () => prin
 document.querySelector("#printInternalBtn").addEventListener("click", () => printQuoteSheet("internal"));
 document.querySelector("#tenderFileBtn").addEventListener("click", () => els.tenderFileInput.click());
 document.querySelector("#ownFileBtn").addEventListener("click", () => els.ownFileInput.click());
+els.runBidCheckBtn.addEventListener("click", runBidCheck);
 
 els.statusTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-status]");
@@ -174,11 +185,19 @@ els.statusTabs.addEventListener("click", (event) => {
 });
 
 els.projectList.addEventListener("click", (event) => {
+  const actionButton = event.target.closest("[data-project-action]");
+  if (actionButton) {
+    const projectId = actionButton.closest("[data-project-id]")?.dataset.projectId;
+    if (!projectId) return;
+    const action = actionButton.dataset.projectAction;
+    if (action === "view") selectProject(projectId);
+    if (action === "copy") duplicateProject(projectId);
+    if (action === "delete") deleteProjectById(projectId);
+    return;
+  }
   const card = event.target.closest("[data-project-id]");
   if (!card) return;
-  currentId = card.dataset.projectId;
-  persist();
-  render();
+  selectProject(card.dataset.projectId);
 });
 
 els.projectForm.addEventListener("input", handleProjectInput);
@@ -193,8 +212,8 @@ els.itemsTableBody.addEventListener("click", handleItemClick);
 els.itemsFileInput.addEventListener("change", handleItemsFile);
 els.quoteScenarios.addEventListener("click", handleScenarioClick);
 els.riskList.addEventListener("click", handleRiskToggle);
-els.tenderFileInput.addEventListener("change", (event) => handleBidFile(event, "tenderFileName"));
-els.ownFileInput.addEventListener("change", (event) => handleBidFile(event, "ownFileName"));
+els.tenderFileInput.addEventListener("change", (event) => handleBidFile(event, "tenderFile"));
+els.ownFileInput.addEventListener("change", (event) => handleBidFile(event, "ownFile"));
 els.bidChecklist.addEventListener("change", handleBidChecklistInput);
 
 render();
@@ -271,6 +290,10 @@ function goNextStep() {
   setStep(currentStep >= 4 ? 1 : currentStep + 1);
 }
 
+function goPrevStep() {
+  setStep(currentStep <= 1 ? 1 : currentStep - 1);
+}
+
 function renderStep() {
   els.stepPages.forEach((page) => {
     page.classList.toggle("active", Number(page.dataset.stepPage) === currentStep);
@@ -287,7 +310,35 @@ function renderStep() {
     3: "标书检查",
     4: "回到填写"
   };
+  els.topPrevBtn.disabled = currentStep === 1;
   els.topNextBtn.textContent = labels[currentStep] || "下一步";
+}
+
+function selectProject(projectId) {
+  if (!state.projects.some((project) => project.id === projectId)) return;
+  currentId = projectId;
+  persist();
+  render();
+}
+
+function duplicateProject(projectId) {
+  const source = state.projects.find((project) => project.id === projectId);
+  if (!source) return;
+  const copy = normalizeProject({
+    ...structuredClone(source),
+    id: uid(),
+    quoteNo: makeQuoteNo(),
+    quoteDate: todayString(),
+    historySavedAt: "",
+    name: `${source.name || "未命名项目"} - 复制`,
+    status: "draft"
+  });
+  state.projects.unshift(copy);
+  currentId = copy.id;
+  activeStatus = "all";
+  persist("manual");
+  render();
+  setSaved(`已复制历史报价，新报价编号 ${copy.quoteNo}`, "success");
 }
 
 function renderStatusTabs() {
@@ -316,16 +367,26 @@ function renderProjectList() {
   els.projectList.innerHTML = filtered
     .map((project) => {
       const calc = calculate(project);
-      const deadline = project.deadline ? `开标 ${project.deadline}` : "未填开标时间";
+      const quoteDate = project.quoteDate || project.historySavedAt?.slice(0, 10) || "-";
       return `
-        <button class="project-card ${project.id === currentId ? "active" : ""}" type="button" data-project-id="${project.id}">
+        <article class="project-card ${project.id === currentId ? "active" : ""}" data-project-id="${project.id}">
           <div class="project-card-head">
             <h3>${escapeHtml(project.name || "未命名项目")}</h3>
             <span class="pill ${project.status}">${statusLabels[project.status] || "待定"}</span>
           </div>
-          <p>${escapeHtml(project.client || "未填客户")} · ${deadline}</p>
-          <p>含税 ${money.format(calc.totalQuote)} · 毛利 ${formatPercent(calc.margin)}</p>
-        </button>
+          <dl class="project-meta">
+            <div><dt>报价编号</dt><dd>${escapeHtml(project.quoteNo || "-")}</dd></div>
+            <div><dt>客户</dt><dd>${escapeHtml(project.client || "未填客户")}</dd></div>
+            <div><dt>报价日期</dt><dd>${quoteDate}</dd></div>
+            <div><dt>含税总价</dt><dd>${money.format(calc.totalQuote)}</dd></div>
+            <div><dt>毛利率</dt><dd>${formatPercent(calc.margin)}</dd></div>
+          </dl>
+          <div class="project-card-actions">
+            <button class="button ghost mini" type="button" data-project-action="view">查看</button>
+            <button class="button ghost mini" type="button" data-project-action="copy">复制</button>
+            <button class="button danger mini" type="button" data-project-action="delete">删除</button>
+          </div>
+        </article>
       `;
     })
     .join("");
@@ -430,17 +491,12 @@ function renderSummary() {
   const calc = calculate(project);
   const risks = getRisks(project, calc);
   els.metrics.innerHTML = `
-    ${metric("总报价", money.format(calc.totalQuote), `不含税 ${money.format(calc.salesExTax)}，税额 ${money.format(calc.taxAmount)}`)}
+    ${metric("总报价", money.format(calc.totalQuote), "实时计算")}
     ${metric("毛利率", formatPercent(calc.margin), `目标 ${formatPercent(calc.targetMargin)}`)}
     ${metric("风险数量", `${risks.length} 项`, risks.some((risk) => risk.level === "high") ? "含高风险项，下一步查看" : "下一步集中检查")}
   `;
 
-  const marginScore = clamp(calc.margin * 100, 0, 45);
-  const fillClass = calc.margin < 0 ? "danger" : calc.margin < calc.targetMargin ? "warn" : "";
-  els.marginBand.innerHTML = `
-    <div class="band-track"><div class="band-fill ${fillClass}" style="width:${Math.max(3, (marginScore / 45) * 100)}%"></div></div>
-    <div class="band-text"><span>当前毛利率 ${formatPercent(calc.margin)}</span><span>${risks.length ? `风险 ${risks.length} 项` : "暂无明显风险"}</span></div>
-  `;
+  els.marginBand.innerHTML = "";
 }
 
 function renderAnalysis() {
@@ -454,18 +510,25 @@ function renderAnalysis() {
   const belowBreakEven = calc.totalQuote < calc.breakEvenTotalQuote;
   const belowSuggested = calc.totalQuote < calc.minTotalQuote;
   const canExport = !belowBreakEven && !rowAnalysis.loss.length && !highRisks.length && !missingInfo.some((item) => item.level === "high");
+  const blockingIssues = getBlockingIssues(rowAnalysis, missingInfo, highRisks, belowBreakEven, belowSuggested);
 
   els.analysisDecision.innerHTML = `
     <div class="decision-card ${canExport ? "good" : "warn"}">
       <div>
-        <span>${canExport ? "检查结论" : "需要处理"}</span>
-        <strong>${canExport ? "建议继续导出" : "建议先返回修改"}</strong>
+        <span>检查结论</span>
+        <strong>${canExport ? "可以继续导出" : "不建议导出，请先处理高风险项"}</strong>
       </div>
-      <p>${canExport ? "当前报价未发现阻止导出的高风险问题，仍建议人工复核后导出。" : "存在价格、缺项或高风险提醒，先处理后再导出会更稳妥。"}</p>
+      <p>${canExport ? "当前报价未发现阻止导出的高风险问题，仍建议人工复核后导出。" : "系统发现会影响报价安全或文件完整性的事项，请先返回修改或补齐资料。"}</p>
     </div>
     <div class="decision-pair">
       <span>低于最低可接受报价：<strong>${belowBreakEven ? "是" : "否"}</strong></span>
       <span>低于建议最低报价：<strong>${belowSuggested ? "是" : "否"}</strong></span>
+      <span>需要处理事项：<strong>${blockingIssues.length} 项</strong></span>
+    </div>
+    <div class="decision-issues">
+      ${blockingIssues.length
+        ? blockingIssues.map((issue) => `<div class="risk-item ${issue.level}">${escapeHtml(issue.text)}</div>`).join("")
+        : `<div class="risk-item low">没有发现阻止导出的高风险项。</div>`}
     </div>
   `;
 
@@ -561,6 +624,19 @@ function getRowAnalysis(project, calc) {
   };
 }
 
+function getBlockingIssues(rowAnalysis, missingInfo, highRisks, belowBreakEven, belowSuggested) {
+  const issues = [];
+  if (belowBreakEven) issues.push({ level: "high", text: "当前报价低于最低可接受报价，存在亏损风险。" });
+  if (belowSuggested) issues.push({ level: "medium", text: "当前报价低于建议最低报价，利润缓冲不足。" });
+  if (rowAnalysis.loss.length) issues.push({ level: "high", text: `存在 ${rowAnalysis.loss.length} 行设备/服务亏损，请调整成本或报价。` });
+  if (rowAnalysis.lowMargin.length) issues.push({ level: "medium", text: `存在 ${rowAnalysis.lowMargin.length} 行设备/服务毛利率偏低。` });
+  missingInfo.forEach((item) => issues.push(item));
+  highRisks.forEach((item) => {
+    if (!issues.some((issue) => issue.text === item.text)) issues.push(item);
+  });
+  return issues;
+}
+
 function renderIssueTable(rows, emptyText) {
   if (!rows.length) return `<div class="empty-state">${emptyText}</div>`;
   return `
@@ -629,7 +705,7 @@ function renderPrintSheet(mode = "customer") {
       <p>质保期：${Number(project.warrantyMonths || 0)} 个月</p>
       <p>付款方式：${escapeHtml(project.payment || "-")}</p>
       <p>税率：${formatPercent(calc.taxRate)}</p>
-      <p>项目预算：${money.format(Number(project.budget || 0))}</p>
+      ${isInternal ? `<p>项目预算：${money.format(Number(project.budget || 0))}</p>` : ""}
     </div>
     <table class="print-table ${isInternal ? "internal" : "customer"}">
       <thead>
@@ -698,10 +774,13 @@ function printQuoteSheet(mode) {
 function saveCurrentToHistory() {
   const project = getCurrentProject();
   if (!project) return;
+  project.quoteDate = todayString();
+  project.historySavedAt = new Date().toISOString();
+  updateProject(project, true);
   persist("manual");
   renderProjectList();
   renderStatusTabs();
-  setSaved("保存成功，已保存为历史报价记录（localStorage）", "success");
+  setSaved(`保存成功，历史报价已更新：${project.quoteNo}`, "success");
 }
 
 function renderExportStep() {
@@ -960,6 +1039,12 @@ function clearCurrentQuote() {
 
 function deleteCurrentProject() {
   const project = getCurrentProject();
+  if (!project) return;
+  deleteProjectById(project.id);
+}
+
+function deleteProjectById(projectId) {
+  const project = state.projects.find((entry) => entry.id === projectId);
   if (!project) return;
   if (state.projects.length <= 1) {
     window.alert("至少需要保留一个报价记录。");
@@ -1332,14 +1417,14 @@ function renderBidAssistant() {
   const project = getCurrentProject();
   if (!project) return;
   const bidCheck = project.bidCheck || normalizeBidCheck();
-  const rows = buildBidCheckRows(project);
+  const rows = bidCheck.results;
   const mustItems = [
-    ...rows.filter((row) => row.level === "high").map((row) => row.problem),
+    ...rows.filter((row) => row.level === "high").map((row) => row.problem || `${row.item}缺失`),
     ...bidChecklistItems.filter((item) => !bidCheck.checklist[item])
   ];
 
-  els.bidFileStatus.textContent = `招标方文件：${bidCheck.tenderFileName || "未导入"}；我方文件：${bidCheck.ownFileName || "未导入"}`;
-  els.bidFileStatus.className = `import-status ${bidCheck.tenderFileName && bidCheck.ownFileName ? "success" : ""}`.trim();
+  els.bidFileStatus.innerHTML = renderBidFiles(bidCheck);
+  els.bidFileStatus.className = `import-status ${bidCheck.tenderFile && bidCheck.ownFile ? "success" : ""}`.trim();
   els.bidResults.innerHTML = renderBidResultTable(rows);
   els.bidChecklist.innerHTML = bidChecklistItems
     .map((item) => `
@@ -1355,54 +1440,43 @@ function renderBidAssistant() {
 }
 
 function buildBidCheckRows(project) {
-  const missingChecklist = checklistItems.filter((item) => !project.checklist[item]);
-  return [
-    {
-      item: "招标方文件",
-      status: project.bidCheck?.tenderFileName ? "已导入" : "未导入",
-      problem: "招标方文件未导入，无法做最终条款核对。",
-      level: project.bidCheck?.tenderFileName ? "low" : "high"
-    },
-    {
-      item: "我方文件",
-      status: project.bidCheck?.ownFileName ? "已导入" : "未导入",
-      problem: "我方文件未导入，无法做提交前完整性核对。",
-      level: project.bidCheck?.ownFileName ? "low" : "high"
-    },
-    {
-      item: "客户联系人",
-      status: project.contact ? "已填写" : "缺失",
-      problem: "客户联系人/电话缺失。",
-      level: project.contact ? "low" : "high"
-    },
-    {
-      item: "报价有效期",
-      status: numberValue(project.validDays) > 0 ? `${numberValue(project.validDays)} 天` : "缺失",
-      problem: "报价有效期缺失。",
-      level: numberValue(project.validDays) > 0 ? "low" : "medium"
-    },
-    {
-      item: "付款条款",
-      status: project.payment ? "已填写" : "缺失",
-      problem: "付款条款缺失。",
-      level: project.payment ? "low" : "medium"
-    },
-    {
-      item: "交期/质保",
-      status: numberValue(project.deliveryDays) > 0 && numberValue(project.warrantyMonths) > 0 ? "已填写" : "缺失",
-      problem: "交期或质保缺失。",
-      level: numberValue(project.deliveryDays) > 0 && numberValue(project.warrantyMonths) > 0 ? "low" : "medium"
-    },
-    {
-      item: "投标资料清单",
-      status: missingChecklist.length ? `缺 ${missingChecklist.length} 项` : "已完成",
-      problem: missingChecklist.length ? `投标资料清单还有 ${missingChecklist.length} 项未确认。` : "投标资料清单已完成。",
-      level: missingChecklist.length ? "medium" : "low"
-    }
-  ];
+  return buildBidRuleResults(project);
+}
+
+function renderBidFiles(bidCheck) {
+  return `
+    <div class="bid-file-list">
+      ${renderBidFileCard("招标方文件", bidCheck.tenderFile)}
+      ${renderBidFileCard("我方文件", bidCheck.ownFile)}
+    </div>
+  `;
+}
+
+function renderBidFileCard(label, file) {
+  if (!file) {
+    return `<div class="bid-file-card empty"><strong>${label}</strong><span>未导入</span></div>`;
+  }
+  return `
+    <div class="bid-file-card">
+      <strong>${label}</strong>
+      <dl>
+        <div><dt>文件名称</dt><dd>${escapeHtml(file.name)}</dd></div>
+        <div><dt>文件类型</dt><dd>${escapeHtml(file.extension || file.type || "未知")}</dd></div>
+        <div><dt>文件大小</dt><dd>${readableFileSize(file.size)}</dd></div>
+        <div><dt>导入时间</dt><dd>${formatDateTime(file.importedAt)}</dd></div>
+      </dl>
+      <div class="file-preview">
+        <span>文本预览</span>
+        <pre>${escapeHtml(file.preview || file.parseStatus || "暂无可显示文本")}</pre>
+      </div>
+    </div>
+  `;
 }
 
 function renderBidResultTable(rows) {
+  if (!rows.length) {
+    return `<div class="empty-state">尚未运行一键检查。导入文件或确认项目信息后，点击“一键检查”生成结果。</div>`;
+  }
   return `
     <div class="issue-table-wrap">
       <table class="issue-table">
@@ -1427,15 +1501,16 @@ function renderBidResultTable(rows) {
   `;
 }
 
-function handleBidFile(event, fieldName) {
+async function handleBidFile(event, fieldName) {
   const file = event.target.files?.[0];
   if (!file) return;
   const project = getCurrentProject();
   if (!project) return;
   project.bidCheck = normalizeBidCheck(project.bidCheck);
-  project.bidCheck[fieldName] = file.name;
+  project.bidCheck[fieldName] = await readBidFileMeta(file);
+  project.bidCheck.results = [];
   updateProject(project, true);
-  setSaved("标书文件记录已保存到 localStorage", "success");
+  setSaved("标书文件信息和预览已保存到 localStorage", "success");
   event.target.value = "";
 }
 
@@ -1447,6 +1522,125 @@ function handleBidChecklistInput(event) {
   project.bidCheck = normalizeBidCheck(project.bidCheck);
   project.bidCheck.checklist[item] = event.target.checked;
   updateProject(project, true);
+}
+
+function runBidCheck() {
+  const project = getCurrentProject();
+  if (!project) return;
+  project.bidCheck = normalizeBidCheck(project.bidCheck);
+  project.bidCheck.results = buildBidRuleResults(project);
+  project.bidCheck.lastCheckedAt = new Date().toISOString();
+  updateProject(project, true);
+  const missingCount = project.bidCheck.results.filter((row) => row.level !== "low").length;
+  setSaved(`标书检查完成：${missingCount} 项需要确认，结果已保存到 localStorage`, missingCount ? "pending" : "success");
+}
+
+function buildBidRuleResults(project) {
+  const bidCheck = normalizeBidCheck(project.bidCheck);
+  const combinedText = [
+    bidCheck.tenderFile?.preview || "",
+    bidCheck.ownFile?.preview || "",
+    project.name,
+    project.client,
+    project.company,
+    project.contact,
+    project.payment,
+    project.notes,
+    project.items.map((item) => `${item.name} ${item.model} ${item.spec}`).join(" ")
+  ].join(" ");
+  const normalizedText = normalizeSearchText(combinedText);
+  const fileRows = [
+    {
+      item: "招标方文件",
+      status: bidCheck.tenderFile ? "已导入" : "缺失",
+      problem: bidCheck.tenderFile ? "招标方文件已导入。" : "招标方文件未导入，无法核对招标要求。",
+      level: bidCheck.tenderFile ? "low" : "high"
+    },
+    {
+      item: "我方文件",
+      status: bidCheck.ownFile ? "已导入" : "缺失",
+      problem: bidCheck.ownFile ? "我方文件已导入。" : "我方文件未导入，无法核对最终投标文件。",
+      level: bidCheck.ownFile ? "low" : "high"
+    }
+  ];
+  const ruleRows = bidCheckRules.map((rule) => {
+    const projectSignal = getProjectSignalForBidRule(rule.key, project);
+    const textSignal = rule.terms.some((term) => normalizedText.includes(normalizeSearchText(term)));
+    const found = projectSignal || textSignal;
+    return {
+      item: rule.label,
+      status: found ? "已发现" : "缺失",
+      problem: found ? `${rule.label}已在项目信息或导入文本中发现。` : `${rule.label}缺失，请在投标文件或项目信息中补齐。`,
+      level: found ? "low" : getBidRuleLevel(rule.key)
+    };
+  });
+  return [...fileRows, ...ruleRows];
+}
+
+function getProjectSignalForBidRule(key, project) {
+  const checklist = project.checklist || {};
+  const signals = {
+    companyIntro: Boolean(project.company || project.notes),
+    technicalPlan: Boolean(project.items.some((item) => item.spec) || checklist["技术偏离表"]),
+    quoteTable: Boolean(project.items.some((item) => numberValue(item.quoteUnit) > 0) || checklist["报价汇总表"]),
+    delivery: numberValue(project.deliveryDays) > 0 && project.items.every((item) => numberValue(item.leadTime) > 0),
+    warranty: numberValue(project.warrantyMonths) > 0 && project.items.every((item) => numberValue(item.warranty) > 0),
+    payment: Boolean(project.payment),
+    afterSales: Boolean(project.notes && /售后|服务|维修|质保/.test(project.notes)),
+    qualification: Boolean(checklist["营业执照"] || checklist["检测报告/合格证"]),
+    authorization: Boolean(checklist["法人授权书"] || checklist["厂家授权/代理证明"]),
+    deviation: Boolean(checklist["技术偏离表"] || checklist["商务偏离表"]),
+    sealSignature: Boolean(checklist["盖章签字"]),
+    contact: Boolean(project.contact),
+    validity: numberValue(project.validDays) > 0
+  };
+  return Boolean(signals[key]);
+}
+
+function getBidRuleLevel(key) {
+  return ["quoteTable", "sealSignature", "contact", "validity"].includes(key) ? "high" : "medium";
+}
+
+async function readBidFileMeta(file) {
+  const extension = getFileExtension(file.name);
+  const meta = {
+    name: file.name,
+    type: file.type || extension || "未知",
+    extension,
+    size: file.size || 0,
+    importedAt: new Date().toISOString(),
+    preview: "",
+    parseStatus: ""
+  };
+  if (["txt", "csv", "tsv"].includes(extension)) {
+    meta.preview = limitPreview(await file.text());
+    meta.parseStatus = meta.preview ? "已读取文本预览" : "文件为空或无法读取文本";
+    return meta;
+  }
+  if (["xlsx", "xls"].includes(extension)) {
+    if (!window.XLSX) {
+      meta.parseStatus = "Excel 解析库未加载，已保存文件信息，暂未生成预览。";
+      return meta;
+    }
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = window.XLSX.read(buffer, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const csv = window.XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
+      meta.preview = limitPreview(csv);
+      meta.parseStatus = meta.preview ? `已读取 ${sheetName} 工作表预览` : "Excel 文件未识别到可预览文本";
+      return meta;
+    } catch {
+      meta.parseStatus = "Excel 文件读取失败，已保存文件信息。";
+      return meta;
+    }
+  }
+  if (["doc", "docx", "pdf"].includes(extension)) {
+    meta.parseStatus = "Word/PDF 已保存文件信息，正文解析将在后续版本完善。";
+    return meta;
+  }
+  meta.parseStatus = "暂不支持该文件类型的正文解析，已保存文件信息。";
+  return meta;
 }
 
 async function readImportRows(file) {
@@ -1610,8 +1804,24 @@ function normalizeHeader(value) {
     .replace(/不含税|含税|元|天|月/g, "");
 }
 
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[：:，,。.;；、（）()【】\[\]<>《》"']/g, "");
+}
+
 function cleanCell(value) {
   return String(value ?? "").trim();
+}
+
+function limitPreview(text) {
+  const cleanText = String(text ?? "").replace(/\r/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return cleanText.length > 3000 ? `${cleanText.slice(0, 3000)}\n...` : cleanText;
+}
+
+function getFileExtension(fileName) {
+  return String(fileName || "").split(".").pop()?.toLowerCase() || "";
 }
 
 function downloadCsv(rows, fileName) {
@@ -1731,6 +1941,8 @@ function normalizeProject(project) {
     id: project.id || uid(),
     status: normalizeStatus(project.status),
     quoteNo: project.quoteNo || makeQuoteNo(),
+    quoteDate: project.quoteDate || project.createdAt?.slice(0, 10) || todayString(),
+    historySavedAt: project.historySavedAt || "",
     company: project.company || "",
     contact: project.contact || "",
     taxRate: rateValue(project.taxRate ?? 0.13),
@@ -1754,10 +1966,36 @@ function normalizeProject(project) {
 
 function normalizeBidCheck(bidCheck = {}) {
   bidCheck = bidCheck || {};
+  const tenderFile = normalizeBidFile(bidCheck.tenderFile || (bidCheck.tenderFileName ? { name: bidCheck.tenderFileName } : null));
+  const ownFile = normalizeBidFile(bidCheck.ownFile || (bidCheck.ownFileName ? { name: bidCheck.ownFileName } : null));
   return {
-    tenderFileName: bidCheck.tenderFileName || "",
-    ownFileName: bidCheck.ownFileName || "",
-    checklist: Object.fromEntries(bidChecklistItems.map((item) => [item, Boolean(bidCheck.checklist?.[item])]))
+    tenderFile,
+    ownFile,
+    checklist: Object.fromEntries(bidChecklistItems.map((item) => [item, Boolean(bidCheck.checklist?.[item])])),
+    results: Array.isArray(bidCheck.results) ? bidCheck.results.map(normalizeBidResult) : [],
+    lastCheckedAt: bidCheck.lastCheckedAt || ""
+  };
+}
+
+function normalizeBidFile(file) {
+  if (!file) return null;
+  return {
+    name: file.name || "",
+    type: file.type || "",
+    extension: file.extension || getFileExtension(file.name || ""),
+    size: numberValue(file.size),
+    importedAt: file.importedAt || "",
+    preview: file.preview || "",
+    parseStatus: file.parseStatus || (file.name ? "仅保存文件名称，建议重新导入以生成预览。" : "")
+  };
+}
+
+function normalizeBidResult(row) {
+  return {
+    item: row.item || "",
+    status: row.status || "待检查",
+    problem: row.problem || "",
+    level: ["high", "medium", "low"].includes(row.level) ? row.level : "medium"
   };
 }
 
@@ -1794,6 +2032,8 @@ function createProject() {
   return {
     id: uid(),
     quoteNo: makeQuoteNo(),
+    quoteDate: todayString(),
+    historySavedAt: "",
     company: "",
     contact: "",
     name: "新招标项目",
@@ -2029,6 +2269,24 @@ function formatPercent(value) {
 function formatClockTime(value) {
   const date = value ? new Date(value) : new Date();
   return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return `${date.toLocaleDateString("zh-CN")} ${date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function todayString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function readableFileSize(value) {
+  const bytes = numberValue(value);
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function formatChineseMoney(value) {

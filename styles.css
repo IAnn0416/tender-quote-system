@@ -211,6 +211,12 @@ svg {
   padding: 0 16px;
 }
 
+.button.mini {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
 .icon-button {
   width: 44px;
   color: var(--ink);
@@ -398,6 +404,43 @@ svg {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.4;
+}
+
+.project-meta {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.project-meta div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.project-meta dt,
+.project-meta dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.project-meta dt {
+  color: var(--muted);
+  font-weight: 760;
+}
+
+.project-meta dd {
+  color: var(--ink);
+  font-weight: 720;
+  overflow-wrap: anywhere;
+}
+
+.project-card-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 12px;
 }
 
 .pill {
@@ -907,6 +950,10 @@ svg {
   background: linear-gradient(90deg, rgba(21, 128, 61, 0.12), rgba(180, 83, 9, 0.12));
 }
 
+.margin-band:empty {
+  display: none;
+}
+
 .band-track {
   height: 10px;
   border-radius: 999px;
@@ -1023,7 +1070,8 @@ svg {
 .analysis-grid,
 .export-summary,
 .export-grid,
-.bid-upload-grid {
+.bid-upload-grid,
+.bid-file-list {
   display: grid;
   gap: 12px;
 }
@@ -1033,10 +1081,17 @@ svg {
   align-items: stretch;
 }
 
+.decision-issues {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+}
+
 .decision-card,
 .decision-pair,
 .export-card,
-.bid-upload-card {
+.bid-upload-card,
+.bid-file-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface-strong);
@@ -1170,9 +1225,79 @@ svg {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.bid-file-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 10px;
+}
+
 .bid-upload-card {
   display: grid;
   gap: 12px;
+}
+
+.bid-file-card {
+  display: grid;
+  gap: 10px;
+}
+
+.bid-file-card.empty {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.bid-file-card dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.bid-file-card dl div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.bid-file-card dt,
+.bid-file-card dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.bid-file-card dt {
+  color: var(--muted);
+  font-weight: 760;
+}
+
+.bid-file-card dd {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.file-preview {
+  display: grid;
+  gap: 6px;
+}
+
+.file-preview span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.file-preview pre {
+  max-height: 160px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px;
+  color: #344054;
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .must-panel {
@@ -1284,7 +1409,8 @@ svg {
   .analysis-grid,
   .export-summary,
   .export-grid,
-  .bid-upload-grid {
+  .bid-upload-grid,
+  .bid-file-list {
     grid-template-columns: 1fr;
   }
 
